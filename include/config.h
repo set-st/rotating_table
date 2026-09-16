@@ -5,69 +5,86 @@
 // КОНФІГУРАЦІЯ ПІНІВ
 // =============================================================================
 // Драйвер крокового двигуна (A4988, DRV8825, TMC2208/2209 тощо)
-constexpr int PIN_STEP          = 18;  // Пін імпульсу кроку (STEP)
-constexpr int PIN_DIR           = 19;  // Пін напрямку (DIR)
-constexpr int PIN_ENABLE        = 5;   // Пін увімкнення драйвера (-1, якщо не підключений)
+constexpr int PIN_STEP = 18; // Пін імпульсу кроку (STEP)
+constexpr int PIN_DIR = 19;  // Пін напрямку (DIR)
+constexpr int PIN_ENABLE =
+    5; // Пін увімкнення драйвера (-1, якщо не підключений)
 
 // Активний рівень сигналу Enable драйвера
-// Більшість драйверів (A4988, DRV8825, TMC2208/2209) активуються низьким рівнем (LOW)
+// Більшість драйверів (A4988, DRV8825, TMC2208/2209) активуються низьким рівнем
+// (LOW)
 constexpr bool ENABLE_ACTIVE_LOW = true;
 
 // Кінцевий вимикач (Кінцевик / Endstop)
 // За замовчуванням підключається між PIN_ENDSTOP та GND
-constexpr int PIN_ENDSTOP       = 4;   // GPIO кінцевика
-constexpr bool ENDSTOP_PULLUP   = true; // Використовувати внутрішню підтяжку ESP32 (INPUT_PULLUP)
+constexpr int PIN_ENDSTOP = 4; // GPIO кінцевика
+constexpr bool ENDSTOP_PULLUP =
+    true; // Використовувати внутрішню підтяжку ESP32 (INPUT_PULLUP)
 
 // Початкові налаштування кінцевика (можуть змінюватися через веб-інтерфейс):
-// За замовчуванням нормально-розімкнений перемикач на GND дає LOW при натисканні (false = не інвертований / Active LOW)
+// За замовчуванням нормально-розімкнений перемикач на GND дає LOW при
+// натисканні (false = не інвертований / Active LOW)
 constexpr bool DEFAULT_ENDSTOP_INVERTED = false;
-// Час фільтрації брязкоту контактів / підтвердження спрацьовування (в мілісекундах)
+// Час фільтрації брязкоту контактів / підтвердження спрацьовування (в
+// мілісекундах)
 constexpr uint32_t DEFAULT_ENDSTOP_DEBOUNCE_MS = 10;
 
 // Інверсія напрямку обертання двигуна
 // Встановіть true, якщо двигун обертається у зворотний бік
-constexpr bool INVERT_DIR       = false;
+constexpr bool INVERT_DIR = false;
 
 // =============================================================================
 // МЕХАНІКА ТА КІНЕМАТИКА
 // =============================================================================
-constexpr float STEPS_PER_MOTOR_REV = 200.0f; // Кроків двигуна на повний оберт 360° (200 для 1.8°, 400 для 0.9°)
-constexpr float MICROSTEPS          = 16.0f;  // Мікрокрок драйвера (1, 2, 4, 8, 16, 32...)
-constexpr float GEAR_RATIO          = 1.0f;   // 1.0 = прямий привід; >1.0 якщо є редуктор (наприклад, 4.0 для 4:1)
+constexpr float STEPS_PER_MOTOR_REV =
+    200.0f; // Кроків двигуна на повний оберт 360° (200 для 1.8°, 400 для 0.9°)
+constexpr float MICROSTEPS =
+    16.0f; // Мікрокрок драйвера (1, 2, 4, 8, 16, 32...)
+constexpr float GEAR_RATIO =
+    1.0f; // 1.0 = прямий привід; >1.0 якщо є редуктор (наприклад, 4.0 для 4:1)
 
 // Розрахована кількість кроків на один градус повороту столу
-constexpr float STEPS_PER_DEGREE    = (STEPS_PER_MOTOR_REV * MICROSTEPS * GEAR_RATIO) / 360.0f;
+constexpr float STEPS_PER_DEGREE =
+    (STEPS_PER_MOTOR_REV * MICROSTEPS * GEAR_RATIO) / 360.0f;
 
 // =============================================================================
 // ОБМЕЖЕННЯ ШВИДКОСТІ ТА ПРИСКОРЕННЯ (в градусах та градусах/сек)
 // =============================================================================
-constexpr float DEFAULT_SPEED_DEG_S     = 30.0f;   // Стандартна швидкість обертання у град/с
-constexpr float MAX_SPEED_DEG_S         = 180.0f;  // Максимально допустима швидкість у град/с
-constexpr float DEFAULT_ACCEL_DEG_S2    = 90.0f;   // Прискорення у град/с^2
+constexpr float DEFAULT_SPEED_DEG_S =
+    3.0f; // Стандартна швидкість обертання у град/с
+constexpr float MAX_SPEED_DEG_S =
+    30.0f; // Максимально допустима швидкість у град/с
+constexpr float DEFAULT_ACCEL_DEG_S2 = 15.0f; // Прискорення у град/с^2
 
 // =============================================================================
 // КАЛІБРУВАННЯ ТА ПОШУК КІНЦЕВИКА (HOMING)
 // =============================================================================
-// Напрямок: -1 = проти годинникової стрілки (вліво), +1 = за годинниковою (вправо)
-constexpr int   HOMING_DIRECTION        = -1;
-constexpr float HOMING_SPEED_FAST_DEG_S = 25.0f;  // Швидкість швидкого наближення
-constexpr float HOMING_SPEED_SLOW_DEG_S = 5.0f;   // Швидкість точного торкання
-constexpr float HOMING_BACKOFF_DEG      = 5.0f;   // Кут відкату після першого торкання
-constexpr uint32_t HOMING_TIMEOUT_SEC   = 35;     // Таймаут безпеки (запобігає нескінченному руху при обриві)
-constexpr bool  AUTO_HOME_ON_BOOT       = true;   // Автоматичний пошук нуля при запуску
+// Напрямок: -1 = проти годинникової стрілки (вліво), +1 = за годинниковою
+// (вправо)
+constexpr int HOMING_DIRECTION = -1;
+constexpr float HOMING_SPEED_FAST_DEG_S =
+    25.0f;                                      // Швидкість швидкого наближення
+constexpr float HOMING_SPEED_SLOW_DEG_S = 5.0f; // Швидкість точного торкання
+constexpr float HOMING_BACKOFF_DEG = 5.0f; // Кут відкату після першого торкання
+constexpr uint32_t HOMING_TIMEOUT_SEC =
+    35; // Таймаут безпеки (запобігає нескінченному руху при обриві)
+constexpr bool AUTO_HOME_ON_BOOT = true; // Автоматичний пошук нуля при запуску
 
 // =============================================================================
 // НАЛАШТУВАННЯ WI-FI ТА МЕРЕЖІ ЗА ЗАМОВЧУВАННЯМ
 // =============================================================================
 // Можна залишити порожнім або змінити пізніше через веб-інтерфейс:
-#define WIFI_SSID     "YOUR_WIFI_SSID"
+#define WIFI_SSID "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
-constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 10000; // Час очікування роутера перед переходом в режим точки доступу
+constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS =
+    10000; // Час очікування роутера перед переходом в режим точки доступу
 
 // Власна точка доступу (SoftAP) за замовчуванням:
-#define AP_SSID       "RotatingTable-ESP32"
-#define AP_PASSWORD   "12345678" // Мінімум 8 символів для WPA2 або порожньо "" для відкритої мережі
+#define AP_SSID "RotatingTable-ESP32"
+#define AP_PASSWORD                                                            \
+  "12345678" // Мінімум 8 символів для WPA2 або порожньо "" для відкритої мережі
 
-#define HOSTNAME      "rotating-table" // Доступно за адресою http://rotating-table.local
+#define HOSTNAME                                                               \
+  "rotating-table" // Доступно за адресою http://rotating-table.local
 constexpr uint16_t WEB_SERVER_PORT = 80;
