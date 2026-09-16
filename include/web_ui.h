@@ -391,7 +391,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       
       <div class="toggle-group">
         <div id="btnModeAbs" class="toggle-btn active" onclick="setRelativeMode(false)">Абсолютний кут</div>
-        <div id="btnModeRel" class="toggle-btn" onclick="setRelativeMode(true)">Відносний крок (Δ)</div>
+        <div id="btnModeRel" class="toggle-btn" onclick="setRelativeMode(true)">Відносний кутΔ)</div>
       </div>
 
       <div class="form-group">
