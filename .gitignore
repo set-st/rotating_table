@@ -1,0 +1,23 @@
+# PlatformIO
+.pio
+.pioenvs
+.piolibdeps
+
+# VSCode / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# OS
+.DS_Store
+Thumbs.db
