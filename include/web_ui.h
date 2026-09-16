@@ -414,7 +414,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       <div class="form-group" style="margin-top: 16px;">
         <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
           <label for="rangeSpeed">Швидкість обертання:</label>
-          <span id="txtSpeedLabel" style="font-size: 0.9rem; font-weight:600; color:var(--primary)">45 °/с</span>
+          <span id="txtSpeedLabel" style="font-size: 0.9rem; font-weight:600; color:var(--primary)">3 °/с</span>
         </div>
         <input type="range" id="rangeSpeed" min="1" max="30" value="3" oninput="onSpeedChange(this.value)">
       </div>
