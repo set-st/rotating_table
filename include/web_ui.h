@@ -995,7 +995,7 @@ POST /api/wifi/reset</pre>
         const txtEndstop = document.getElementById('txtEndstop');
         if (st.endstop_triggered) {
           dotEndstop.className = 'indicator-dot dot-on';
-          txtEndstop.textContent = 'НАТИСНУТИЙ';
+          txtEndstop.textContent = 'Натиснутий';
         } else {
           dotEndstop.className = 'indicator-dot dot-off';
           txtEndstop.textContent = 'Розімкнений';
