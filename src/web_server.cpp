@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include "web_ui.h"
 #include "motion_controller.h"
+#include "wifi_manager.h"
 #include "config.h"
 #include <ArduinoJson.h>
 
@@ -11,7 +12,7 @@ TableWebServer::TableWebServer() : server(WEB_SERVER_PORT) {}
 void TableWebServer::begin() {
     setupRoutes();
     server.begin();
-    Serial.printf("[Web] HTTP Server started on port %d\n", WEB_SERVER_PORT);
+    Serial.printf("[Web] HTTP-сервер запущено на порту %d\n", WEB_SERVER_PORT);
 }
 
 void TableWebServer::handleClient() {
@@ -26,28 +27,43 @@ void TableWebServer::sendCorsHeaders() {
 
 void TableWebServer::handleOptions() {
     sendCorsHeaders();
-    server.send(204); // No Content
+    server.send(204); // Немає вмісту
 }
 
 void TableWebServer::setupRoutes() {
-    // Root UI
+    // Головна веб-сторінка
     server.on("/", HTTP_GET, [this]() { handleRoot(); });
 
-    // CORS preflight requests
+    // CORS preflight запити
     server.on("/api/status", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/home", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/move", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/settings", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/wifi/config", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/wifi/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/wifi/save", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/wifi/reset", HTTP_OPTIONS, [this]() { handleOptions(); });
 
-    // REST API endpoints
+    // REST API ендпоінти
     server.on("/api/status", HTTP_GET, [this]() { handleStatus(); });
     server.on("/api/home", HTTP_POST, [this]() { handleHome(); });
     server.on("/api/move", HTTP_POST, [this]() { handleMove(); });
     server.on("/api/stop", HTTP_POST, [this]() { handleStop(); });
     server.on("/api/zero", HTTP_POST, [this]() { handleZero(); });
 
-    // 404 Not Found
+    // Налаштування кінцевика
+    server.on("/api/settings", HTTP_GET, [this]() { handleGetSettings(); });
+    server.on("/api/settings", HTTP_POST, [this]() { handleSaveSettings(); });
+
+    // Налаштування Wi-Fi
+    server.on("/api/wifi/config", HTTP_GET, [this]() { handleWiFiConfig(); });
+    server.on("/api/wifi/scan", HTTP_GET, [this]() { handleWiFiScan(); });
+    server.on("/api/wifi/save", HTTP_POST, [this]() { handleWiFiSave(); });
+    server.on("/api/wifi/reset", HTTP_POST, [this]() { handleWiFiReset(); });
+
+    // 404 Сторінку не знайдено
     server.onNotFound([this]() { handleNotFound(); });
 }
 
@@ -83,14 +99,14 @@ void TableWebServer::handleHome() {
     if (motionCtrl.startHoming()) {
         JsonDocument doc;
         doc["status"] = "ok";
-        doc["message"] = "Homing initiated";
+        doc["message"] = "Калібрування запущено";
         String res;
         serializeJson(doc, res);
         server.send(200, "application/json", res);
     } else {
         JsonDocument doc;
         doc["status"] = "error";
-        doc["error"] = "Cannot start homing (controller busy)";
+        doc["error"] = "Неможливо запустити калібрування (контролер зайнятий)";
         String res;
         serializeJson(doc, res);
         server.send(409, "application/json", res);
@@ -103,7 +119,7 @@ void TableWebServer::handleMove() {
     if (!server.hasArg("plain")) {
         JsonDocument errDoc;
         errDoc["status"] = "error";
-        errDoc["error"] = "Missing request body";
+        errDoc["error"] = "Відсутнє тіло запиту";
         String res;
         serializeJson(errDoc, res);
         server.send(400, "application/json", res);
@@ -115,17 +131,17 @@ void TableWebServer::handleMove() {
     if (err) {
         JsonDocument errDoc;
         errDoc["status"] = "error";
-        errDoc["error"] = "Invalid JSON format";
+        errDoc["error"] = "Некоректний формат JSON";
         String res;
         serializeJson(errDoc, res);
         server.send(400, "application/json", res);
         return;
     }
 
-    if (!reqDoc.containsKey("angle")) {
+    if (!reqDoc["angle"].is<float>()) {
         JsonDocument errDoc;
         errDoc["status"] = "error";
-        errDoc["error"] = "Field 'angle' (float) is required";
+        errDoc["error"] = "Поле 'angle' (float) є обов'язковим";
         String res;
         serializeJson(errDoc, res);
         server.send(400, "application/json", res);
@@ -139,7 +155,7 @@ void TableWebServer::handleMove() {
     if (motionCtrl.moveTo(angle, speed, relative)) {
         JsonDocument respDoc;
         respDoc["status"] = "ok";
-        respDoc["message"] = "Move command accepted";
+        respDoc["message"] = "Команду повороту прийнято";
         respDoc["target_angle"] = angle;
         respDoc["speed"] = speed;
         respDoc["relative"] = relative;
@@ -149,7 +165,7 @@ void TableWebServer::handleMove() {
     } else {
         JsonDocument errDoc;
         errDoc["status"] = "error";
-        errDoc["error"] = "Cannot move (homing in progress or controller busy)";
+        errDoc["error"] = "Неможливо виконати поворот (триває калібрування або контролер зайнятий)";
         String res;
         serializeJson(errDoc, res);
         server.send(409, "application/json", res);
@@ -162,7 +178,7 @@ void TableWebServer::handleStop() {
 
     JsonDocument doc;
     doc["status"] = "ok";
-    doc["message"] = "Motor stopped";
+    doc["message"] = "Двигун зупинено";
     String res;
     serializeJson(doc, res);
     server.send(200, "application/json", res);
@@ -174,17 +190,237 @@ void TableWebServer::handleZero() {
 
     JsonDocument doc;
     doc["status"] = "ok";
-    doc["message"] = "Current position calibrated to 0.0 degrees";
+    doc["message"] = "Поточну позицію встановлено як 0.0 градусів";
     String res;
     serializeJson(doc, res);
     server.send(200, "application/json", res);
+}
+
+void TableWebServer::handleGetSettings() {
+    sendCorsHeaders();
+    HardwareConfig cfg = motionCtrl.getConfig();
+
+    JsonDocument doc;
+    doc["status"] = "ok";
+    doc["pin_step"] = cfg.pinStep;
+    doc["pin_dir"] = cfg.pinDir;
+    doc["pin_enable"] = cfg.pinEnable;
+    doc["pin_endstop"] = cfg.pinEndstop;
+
+    doc["invert_dir"] = cfg.invertDir;
+    doc["endstop_inverted"] = cfg.endstopInverted;
+    doc["endstop_debounce_ms"] = cfg.endstopDebounceMs;
+
+    doc["motor_teeth"] = cfg.motorTeeth;
+    doc["table_teeth"] = cfg.tableTeeth;
+    doc["gear_ratio"] = cfg.getGearRatio();
+    doc["steps_per_rev"] = cfg.stepsPerRev;
+    doc["microsteps"] = cfg.microsteps;
+    doc["steps_per_degree"] = cfg.getStepsPerDegree();
+
+    doc["default_speed"] = cfg.defaultSpeed;
+    doc["max_speed"] = cfg.maxSpeed;
+    doc["acceleration"] = cfg.acceleration;
+
+    doc["homing_direction"] = cfg.homingDirection;
+    doc["auto_home_on_boot"] = cfg.autoHomeOnBoot;
+
+    String res;
+    serializeJson(doc, res);
+    server.send(200, "application/json", res);
+}
+
+void TableWebServer::handleSaveSettings() {
+    sendCorsHeaders();
+
+    if (!server.hasArg("plain")) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Відсутнє тіло запиту";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
+
+    JsonDocument reqDoc;
+    DeserializationError err = deserializeJson(reqDoc, server.arg("plain"));
+    if (err) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Некоректний формат JSON";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
+
+    HardwareConfig cfg = motionCtrl.getConfig();
+
+    if (reqDoc["pin_step"].is<int>()) cfg.pinStep = reqDoc["pin_step"].as<int>();
+    if (reqDoc["pin_dir"].is<int>()) cfg.pinDir = reqDoc["pin_dir"].as<int>();
+    if (reqDoc["pin_enable"].is<int>()) cfg.pinEnable = reqDoc["pin_enable"].as<int>();
+    if (reqDoc["pin_endstop"].is<int>()) cfg.pinEndstop = reqDoc["pin_endstop"].as<int>();
+
+    if (reqDoc["invert_dir"].is<bool>()) cfg.invertDir = reqDoc["invert_dir"].as<bool>();
+    if (reqDoc["endstop_inverted"].is<bool>()) cfg.endstopInverted = reqDoc["endstop_inverted"].as<bool>();
+    if (reqDoc["endstop_debounce_ms"].is<uint32_t>()) cfg.endstopDebounceMs = reqDoc["endstop_debounce_ms"].as<uint32_t>();
+
+    if (reqDoc["motor_teeth"].is<float>()) cfg.motorTeeth = reqDoc["motor_teeth"].as<float>();
+    if (reqDoc["table_teeth"].is<float>()) cfg.tableTeeth = reqDoc["table_teeth"].as<float>();
+    if (reqDoc["steps_per_rev"].is<float>()) cfg.stepsPerRev = reqDoc["steps_per_rev"].as<float>();
+    if (reqDoc["microsteps"].is<float>()) cfg.microsteps = reqDoc["microsteps"].as<float>();
+
+    if (reqDoc["default_speed"].is<float>()) cfg.defaultSpeed = reqDoc["default_speed"].as<float>();
+    if (reqDoc["max_speed"].is<float>()) cfg.maxSpeed = reqDoc["max_speed"].as<float>();
+    if (reqDoc["acceleration"].is<float>()) cfg.acceleration = reqDoc["acceleration"].as<float>();
+
+    if (reqDoc["homing_direction"].is<int>()) cfg.homingDirection = reqDoc["homing_direction"].as<int>();
+    if (reqDoc["auto_home_on_boot"].is<bool>()) cfg.autoHomeOnBoot = reqDoc["auto_home_on_boot"].as<bool>();
+
+    bool rebootRequired = false;
+    if (motionCtrl.applyConfig(cfg, rebootRequired)) {
+        if (rebootRequired) {
+            wifiMgr.scheduleRestart(1500);
+        }
+
+        JsonDocument respDoc;
+        respDoc["status"] = "ok";
+        respDoc["message"] = rebootRequired ? "Піни змінено. Контролер перезавантажується..."
+                                            : "Налаштування столу успішно застосовано";
+        respDoc["reboot_required"] = rebootRequired;
+        respDoc["gear_ratio"] = cfg.getGearRatio();
+        respDoc["steps_per_degree"] = cfg.getStepsPerDegree();
+
+        String res;
+        serializeJson(respDoc, res);
+        server.send(200, "application/json", res);
+    } else {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Не вдалося застосувати налаштування";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(500, "application/json", res);
+    }
+}
+
+void TableWebServer::handleWiFiConfig() {
+    sendCorsHeaders();
+    WiFiSettings cfg = wifiMgr.getSettings();
+
+    JsonDocument doc;
+    doc["status"] = "ok";
+    doc["mode"] = wifiMgr.getModeStr();
+    doc["ip"] = wifiMgr.getIPAddress();
+    doc["connected"] = wifiMgr.isConnectedSTA();
+    doc["current_ssid"] = wifiMgr.getCurrentSSID();
+    doc["sta_ssid"] = cfg.staSSID;
+    doc["ap_ssid"] = cfg.apSSID;
+
+    String res;
+    serializeJson(doc, res);
+    server.send(200, "application/json", res);
+}
+
+void TableWebServer::handleWiFiScan() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    doc["status"] = "ok";
+    JsonArray networks = doc["networks"].to<JsonArray>();
+    wifiMgr.scanNetworks(networks);
+
+    String res;
+    serializeJson(doc, res);
+    server.send(200, "application/json", res);
+}
+
+void TableWebServer::handleWiFiSave() {
+    sendCorsHeaders();
+
+    if (!server.hasArg("plain")) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Відсутнє тіло запиту";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
+
+    JsonDocument reqDoc;
+    DeserializationError err = deserializeJson(reqDoc, server.arg("plain"));
+    if (err) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Некоректний формат JSON";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
+
+    String staSSID = reqDoc["sta_ssid"] | "";
+    String staPass = reqDoc["sta_pass"] | "";
+    String apSSID = reqDoc["ap_ssid"] | "";
+    String apPass = reqDoc["ap_pass"] | "";
+
+    // Пароль власної точки доступу повинен бути >= 8 символів або порожнім
+    if (apPass.length() > 0 && apPass.length() < 8) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Пароль точки доступу має містити щонайменше 8 символів або бути порожнім";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
+
+    if (wifiMgr.saveSettings(staSSID, staPass, apSSID, apPass)) {
+        wifiMgr.scheduleRestart(1500);
+
+        JsonDocument respDoc;
+        respDoc["status"] = "ok";
+        respDoc["message"] = "Налаштування Wi-Fi збережено. Контролер перезавантажується...";
+        String res;
+        serializeJson(respDoc, res);
+        server.send(200, "application/json", res);
+    } else {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Не вдалося зберегти налаштування у пам'ять NVS";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(500, "application/json", res);
+    }
+}
+
+void TableWebServer::handleWiFiReset() {
+    sendCorsHeaders();
+    if (wifiMgr.resetSettings()) {
+        wifiMgr.scheduleRestart(1500);
+
+        JsonDocument doc;
+        doc["status"] = "ok";
+        doc["message"] = "Налаштування мережі скинуто до вихідних. Перезавантаження...";
+        String res;
+        serializeJson(doc, res);
+        server.send(200, "application/json", res);
+    } else {
+        JsonDocument doc;
+        doc["status"] = "error";
+        doc["error"] = "Не вдалося скинути налаштування";
+        String res;
+        serializeJson(doc, res);
+        server.send(500, "application/json", res);
+    }
 }
 
 void TableWebServer::handleNotFound() {
     sendCorsHeaders();
     JsonDocument doc;
     doc["status"] = "error";
-    doc["error"] = "Endpoint not found";
+    doc["error"] = "Ендпоінт не знайдено";
     String res;
     serializeJson(doc, res);
     server.send(404, "application/json", res);

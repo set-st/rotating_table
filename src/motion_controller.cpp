@@ -1,4 +1,7 @@
 #include "motion_controller.h"
+#include <Preferences.h>
+
+static const char* NVS_HW_NAMESPACE = "table_hw";
 
 MotionController motionCtrl;
 
@@ -6,13 +9,37 @@ MotionController::MotionController()
     : stepper(AccelStepper::DRIVER, PIN_STEP, PIN_DIR),
       motionTaskHandle(nullptr),
       mutex(nullptr),
+      currentStepsPerDegree(STEPS_PER_DEGREE),
       state(STATE_IDLE),
       isHomed(false),
       targetAngleDeg(0.0f),
       requestedSpeedDegS(DEFAULT_SPEED_DEG_S),
+      endstopTriggerStartTime(0),
       homingStep(HOME_FAST_APPROACH),
       homingStartTime(0) {
     memset(lastError, 0, sizeof(lastError));
+
+    // Початкові налаштування за замовчуванням
+    cfg.pinStep = PIN_STEP;
+    cfg.pinDir = PIN_DIR;
+    cfg.pinEnable = PIN_ENABLE;
+    cfg.pinEndstop = PIN_ENDSTOP;
+
+    cfg.invertDir = INVERT_DIR;
+    cfg.endstopInverted = DEFAULT_ENDSTOP_INVERTED;
+    cfg.endstopDebounceMs = DEFAULT_ENDSTOP_DEBOUNCE_MS;
+
+    cfg.motorTeeth = 20.0f;
+    cfg.tableTeeth = 60.0f;
+    cfg.stepsPerRev = STEPS_PER_MOTOR_REV;
+    cfg.microsteps = MICROSTEPS;
+
+    cfg.defaultSpeed = DEFAULT_SPEED_DEG_S;
+    cfg.maxSpeed = MAX_SPEED_DEG_S;
+    cfg.acceleration = DEFAULT_ACCEL_DEG_S2;
+
+    cfg.homingDirection = HOMING_DIRECTION;
+    cfg.autoHomeOnBoot = AUTO_HOME_ON_BOOT;
 }
 
 MotionController::~MotionController() {
@@ -24,68 +51,185 @@ MotionController::~MotionController() {
     }
 }
 
-bool MotionController::begin() {
-    mutex = xSemaphoreCreateMutex();
-    if (mutex == nullptr) {
-        Serial.println("[Motion] Error: Failed to create mutex!");
+void MotionController::loadConfig() {
+    Preferences prefs;
+    if (prefs.begin(NVS_HW_NAMESPACE, true)) {
+        cfg.pinStep = prefs.getInt("p_step", PIN_STEP);
+        cfg.pinDir = prefs.getInt("p_dir", PIN_DIR);
+        cfg.pinEnable = prefs.getInt("p_en", PIN_ENABLE);
+        cfg.pinEndstop = prefs.getInt("p_es", PIN_ENDSTOP);
+
+        cfg.invertDir = prefs.getBool("inv_dir", INVERT_DIR);
+        cfg.endstopInverted = prefs.getBool("es_inv", DEFAULT_ENDSTOP_INVERTED);
+        cfg.endstopDebounceMs = prefs.getUInt("es_deb", DEFAULT_ENDSTOP_DEBOUNCE_MS);
+
+        cfg.motorTeeth = prefs.getFloat("m_teeth", 20.0f);
+        cfg.tableTeeth = prefs.getFloat("t_teeth", 60.0f);
+        cfg.stepsPerRev = prefs.getFloat("m_steps", STEPS_PER_MOTOR_REV);
+        cfg.microsteps = prefs.getFloat("micro", MICROSTEPS);
+
+        cfg.defaultSpeed = prefs.getFloat("def_spd", DEFAULT_SPEED_DEG_S);
+        cfg.maxSpeed = prefs.getFloat("max_spd", MAX_SPEED_DEG_S);
+        cfg.acceleration = prefs.getFloat("accel", DEFAULT_ACCEL_DEG_S2);
+
+        cfg.homingDirection = prefs.getInt("home_dir", HOMING_DIRECTION);
+        cfg.autoHomeOnBoot = prefs.getBool("boot_home", AUTO_HOME_ON_BOOT);
+
+        prefs.end();
+    }
+    applyKinematics();
+}
+
+void MotionController::saveConfig() {
+    Preferences prefs;
+    if (prefs.begin(NVS_HW_NAMESPACE, false)) {
+        prefs.putInt("p_step", cfg.pinStep);
+        prefs.putInt("p_dir", cfg.pinDir);
+        prefs.putInt("p_en", cfg.pinEnable);
+        prefs.putInt("p_es", cfg.pinEndstop);
+
+        prefs.putBool("inv_dir", cfg.invertDir);
+        prefs.putBool("es_inv", cfg.endstopInverted);
+        prefs.putUInt("es_deb", cfg.endstopDebounceMs);
+
+        prefs.putFloat("m_teeth", cfg.motorTeeth);
+        prefs.putFloat("t_teeth", cfg.tableTeeth);
+        prefs.putFloat("m_steps", cfg.stepsPerRev);
+        prefs.putFloat("micro", cfg.microsteps);
+
+        prefs.putFloat("def_spd", cfg.defaultSpeed);
+        prefs.putFloat("max_spd", cfg.maxSpeed);
+        prefs.putFloat("accel", cfg.acceleration);
+
+        prefs.putInt("home_dir", cfg.homingDirection);
+        prefs.putBool("boot_home", cfg.autoHomeOnBoot);
+
+        prefs.end();
+    }
+}
+
+void MotionController::applyKinematics() {
+    currentStepsPerDegree = cfg.getStepsPerDegree();
+    if (currentStepsPerDegree <= 0.0f) {
+        currentStepsPerDegree = 1.0f;
+    }
+
+    stepper.setPinsInverted(cfg.invertDir, false, false);
+    stepper.setMaxSpeed(cfg.maxSpeed * currentStepsPerDegree);
+    stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
+}
+
+HardwareConfig MotionController::getConfig() const {
+    return cfg;
+}
+
+bool MotionController::applyConfig(const HardwareConfig& newCfg, bool& rebootRequired) {
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         return false;
     }
 
-    // Configure Endstop pin
-    pinMode(PIN_ENDSTOP, ENDSTOP_PULLUP ? INPUT_PULLUP : INPUT);
+    // Зміна пінів вимагає перезавантаження мікроконтролера
+    rebootRequired = (newCfg.pinStep != cfg.pinStep ||
+                      newCfg.pinDir != cfg.pinDir ||
+                      newCfg.pinEnable != cfg.pinEnable ||
+                      newCfg.pinEndstop != cfg.pinEndstop);
 
-    // Configure Driver Enable pin
-    if (PIN_ENABLE >= 0) {
-        pinMode(PIN_ENABLE, OUTPUT);
+    cfg = newCfg;
+    saveConfig();
+    applyKinematics();
+
+    xSemaphoreGive(mutex);
+    Serial.println("[Motion] Нову апаратну конфігурацію успішно збережено в NVS.");
+    return true;
+}
+
+float MotionController::getStepsPerDegree() const {
+    return currentStepsPerDegree;
+}
+
+bool MotionController::begin() {
+    mutex = xSemaphoreCreateMutex();
+    if (mutex == nullptr) {
+        Serial.println("[Motion] Помилка: Не вдалося створити м'ютекс!");
+        return false;
+    }
+
+    // Завантаження конфігурації з NVS
+    loadConfig();
+
+    // Налаштування піна кінцевика
+    pinMode(cfg.pinEndstop, ENDSTOP_PULLUP ? INPUT_PULLUP : INPUT);
+
+    // Налаштування піна Enable драйвера
+    if (cfg.pinEnable >= 0) {
+        pinMode(cfg.pinEnable, OUTPUT);
         setDriverEnabled(true);
     }
 
-    // Configure AccelStepper
-    stepper.setPinsInverted(INVERT_DIR, false, false);
-    stepper.setMaxSpeed(MAX_SPEED_DEG_S * STEPS_PER_DEGREE);
-    stepper.setAcceleration(DEFAULT_ACCEL_DEG_S2 * STEPS_PER_DEGREE);
+    // Налаштування AccelStepper
+    applyKinematics();
     stepper.setCurrentPosition(0);
 
-    Serial.printf("[Motion] Init OK. Steps/deg: %.3f\n", STEPS_PER_DEGREE);
-    Serial.printf("[Motion] Endstop pin: %d (Active %s, Current: %s)\n",
-                  PIN_ENDSTOP,
-                  ENDSTOP_ACTIVE_LOW ? "LOW" : "HIGH",
-                  isEndstopPressed() ? "PRESSED" : "OPEN");
+    Serial.printf("[Motion] Ініціалізація успішна.\n");
+    Serial.printf("         Шестерні: Мотор=%d з., Стіл=%d з. (Редукція: %.2f:1)\n",
+                  (int)cfg.motorTeeth, (int)cfg.tableTeeth, cfg.getGearRatio());
+    Serial.printf("         Кроків на 1°: %.3f\n", currentStepsPerDegree);
+    Serial.printf("         Піни: STEP=%d, DIR=%d (інверсія: %s), EN=%d, ENDSTOP=%d\n",
+                  cfg.pinStep, cfg.pinDir, cfg.invertDir ? "ТАК" : "НІ", cfg.pinEnable, cfg.pinEndstop);
 
-    // Start background task on Core 1
+    // Запуск фонового завдання на CORE 0.
+    // Core 1 повністю вивільняється для миттєвої обробки HTTP-запитів веб-сервера.
     BaseType_t res = xTaskCreatePinnedToCore(
         motionTaskEntry,
         "MotionTask",
         4096,
         this,
-        configMAX_PRIORITIES - 1, // High priority for precise step timing
+        4, // Пріоритет 4 (вище IDLE, нижче tcpip_task на Core 0)
         &motionTaskHandle,
-        1                         // Core 1 (Core 0 handles Wi-Fi/IP stack)
+        0  // Core 0
     );
 
     return (res == pdPASS);
 }
 
 void MotionController::setDriverEnabled(bool enable) {
-    if (PIN_ENABLE >= 0) {
+    if (cfg.pinEnable >= 0) {
         bool pinLevel = enable ? (ENABLE_ACTIVE_LOW ? LOW : HIGH)
                                : (ENABLE_ACTIVE_LOW ? HIGH : LOW);
-        digitalWrite(PIN_ENABLE, pinLevel);
+        digitalWrite(cfg.pinEnable, pinLevel);
     }
 }
 
 bool MotionController::isEndstopPressed() {
-    int val = digitalRead(PIN_ENDSTOP);
-    return ENDSTOP_ACTIVE_LOW ? (val == LOW) : (val == HIGH);
+    int val = digitalRead(cfg.pinEndstop);
+    bool rawActive = cfg.endstopInverted ? (val == HIGH) : (val == LOW);
+
+    if (cfg.endstopDebounceMs == 0) {
+        return rawActive;
+    }
+
+    uint32_t now = millis();
+    if (rawActive) {
+        if (endstopTriggerStartTime == 0) {
+            endstopTriggerStartTime = now;
+        }
+        if (now - endstopTriggerStartTime >= cfg.endstopDebounceMs) {
+            return true;
+        }
+        return false;
+    } else {
+        endstopTriggerStartTime = 0;
+        return false;
+    }
 }
 
 long MotionController::degToSteps(float deg) const {
-    return lroundf(deg * STEPS_PER_DEGREE);
+    return lroundf(deg * currentStepsPerDegree);
 }
 
 float MotionController::stepsToDeg(long steps) const {
-    if (STEPS_PER_DEGREE == 0.0f) return 0.0f;
-    return (float)steps / STEPS_PER_DEGREE;
+    if (currentStepsPerDegree <= 0.0f) return 0.0f;
+    return (float)steps / currentStepsPerDegree;
 }
 
 void MotionController::setState(MotionState newState, const char* errorMsg) {
@@ -99,28 +243,27 @@ void MotionController::setState(MotionState newState, const char* errorMsg) {
 }
 
 bool MotionController::startHoming() {
-    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
         return false;
     }
 
     if (state == STATE_HOMING) {
         xSemaphoreGive(mutex);
-        return true; // Already homing
+        return true;
     }
 
-    Serial.println("[Motion] Starting homing sequence...");
+    Serial.println("[Motion] Запуск процедури калібрування (Homing)...");
     setDriverEnabled(true);
 
     homingStartTime = millis();
     homingStep = HOME_FAST_APPROACH;
     setState(STATE_HOMING);
 
-    // If switch is already pressed at start, directly start backoff
     if (isEndstopPressed()) {
-        long backoffSteps = -HOMING_DIRECTION * degToSteps(HOMING_BACKOFF_DEG);
+        long backoffSteps = -cfg.homingDirection * degToSteps(HOMING_BACKOFF_DEG);
         stepper.setCurrentPosition(0);
-        stepper.setMaxSpeed(HOMING_SPEED_FAST_DEG_S * STEPS_PER_DEGREE);
-        stepper.setAcceleration(DEFAULT_ACCEL_DEG_S2 * STEPS_PER_DEGREE);
+        stepper.setMaxSpeed(HOMING_SPEED_FAST_DEG_S * currentStepsPerDegree);
+        stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
         stepper.moveTo(backoffSteps);
         homingStep = HOME_BACKOFF;
     }
@@ -130,62 +273,62 @@ bool MotionController::startHoming() {
 }
 
 bool MotionController::moveTo(float angleDeg, float speedDegS, bool relative) {
-    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
         return false;
     }
 
     if (state == STATE_HOMING) {
         xSemaphoreGive(mutex);
-        return false; // Cannot interrupt active homing
+        return false;
     }
 
     setDriverEnabled(true);
 
     if (speedDegS <= 0.0f) {
-        speedDegS = DEFAULT_SPEED_DEG_S;
+        speedDegS = cfg.defaultSpeed;
     }
-    if (speedDegS > MAX_SPEED_DEG_S) {
-        speedDegS = MAX_SPEED_DEG_S;
-    }
-
+    speedDegS = constrain(speedDegS, 1.0f, cfg.maxSpeed);
     requestedSpeedDegS = speedDegS;
-    stepper.setMaxSpeed(speedDegS * STEPS_PER_DEGREE);
-    stepper.setAcceleration(DEFAULT_ACCEL_DEG_S2 * STEPS_PER_DEGREE);
 
+    stepper.setMaxSpeed(speedDegS * currentStepsPerDegree);
+    stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
+
+    long targetSteps = 0;
     if (relative) {
-        targetAngleDeg = stepsToDeg(stepper.currentPosition()) + angleDeg;
-        stepper.move(degToSteps(angleDeg));
+        targetSteps = stepper.currentPosition() + degToSteps(angleDeg);
+        targetAngleDeg = stepsToDeg(targetSteps);
     } else {
+        targetSteps = degToSteps(angleDeg);
         targetAngleDeg = angleDeg;
-        stepper.moveTo(degToSteps(angleDeg));
     }
 
+    stepper.moveTo(targetSteps);
     setState(STATE_MOVING);
-    Serial.printf("[Motion] Move to %.2f° at %.1f°/s (relative: %s)\n",
-                  targetAngleDeg, speedDegS, relative ? "true" : "false");
+
+    Serial.printf("[Motion] Команда повороту: ціль=%.1f°, швидкість=%.1f°/с, відносно=%d\n",
+                  targetAngleDeg, speedDegS, relative);
 
     xSemaphoreGive(mutex);
     return true;
 }
 
 void MotionController::emergencyStop() {
-    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         stepper.stop();
-        stepper.setCurrentPosition(stepper.currentPosition());
-        targetAngleDeg = stepsToDeg(stepper.currentPosition());
-        setState(STATE_STOPPED, "Emergency stop requested");
-        Serial.println("[Motion] EMERGENCY STOP TRIGGERED!");
+        stepper.moveTo(stepper.currentPosition());
+        setState(STATE_STOPPED);
+        Serial.println("[Motion] Аварійна зупинка! Двигун зупинено.");
         xSemaphoreGive(mutex);
     }
 }
 
 void MotionController::setZero() {
-    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         stepper.setCurrentPosition(0);
         targetAngleDeg = 0.0f;
         isHomed = true;
         setState(STATE_IDLE);
-        Serial.println("[Motion] Position reset to 0.0°");
+        Serial.println("[Motion] Позицію скинуто в 0.0°");
         xSemaphoreGive(mutex);
     }
 }
@@ -194,24 +337,14 @@ MotionStatus MotionController::getStatus() {
     MotionStatus s;
     memset(&s, 0, sizeof(s));
 
-    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        s.state = state;
-        s.currentAngle = stepsToDeg(stepper.currentPosition());
-        s.targetAngle = (state == STATE_MOVING) ? targetAngleDeg : s.currentAngle;
-        s.currentSpeed = requestedSpeedDegS;
-        s.isHomed = isHomed;
-        s.endstopTriggered = isEndstopPressed();
-        strncpy(s.errorMessage, lastError, sizeof(s.errorMessage) - 1);
-        xSemaphoreGive(mutex);
-    } else {
-        s.state = state;
-        s.currentAngle = 0.0f;
-        s.targetAngle = 0.0f;
-        s.currentSpeed = 0.0f;
-        s.isHomed = isHomed;
-        s.endstopTriggered = isEndstopPressed();
-        strncpy(s.errorMessage, "Busy", sizeof(s.errorMessage) - 1);
-    }
+    // Миттєве атомарне зчитування для плавного відображення в реальному часі
+    s.state = state;
+    s.currentAngle = stepsToDeg(stepper.currentPosition());
+    s.targetAngle = (state == STATE_MOVING) ? targetAngleDeg : s.currentAngle;
+    s.currentSpeed = requestedSpeedDegS;
+    s.isHomed = isHomed;
+    s.endstopTriggered = isEndstopPressed();
+    strncpy(s.errorMessage, lastError, sizeof(s.errorMessage) - 1);
 
     switch (s.state) {
         case STATE_IDLE:    s.stateStr = "IDLE"; break;
@@ -234,85 +367,64 @@ void MotionController::motionLoop() {
     uint32_t lastYieldTime = millis();
 
     while (true) {
-        if (xSemaphoreTake(mutex, 0) == pdTRUE) {
-            switch (state) {
-                case STATE_HOMING: {
-                    // Check safety timeout
-                    if ((millis() - homingStartTime) > (HOMING_TIMEOUT_SEC * 1000UL)) {
-                        stepper.stop();
-                        setState(STATE_ERROR, "Homing timeout: Endstop not triggered within limit");
-                        Serial.println("[Motion] Error: Homing timeout!");
-                        break;
-                    }
-
-                    if (homingStep == HOME_FAST_APPROACH) {
-                        if (isEndstopPressed()) {
-                            // Hit endstop on fast approach
-                            stepper.setCurrentPosition(0);
-                            long backoffSteps = -HOMING_DIRECTION * degToSteps(HOMING_BACKOFF_DEG);
-                            stepper.setMaxSpeed(HOMING_SPEED_FAST_DEG_S * STEPS_PER_DEGREE);
-                            stepper.setAcceleration(DEFAULT_ACCEL_DEG_S2 * STEPS_PER_DEGREE);
-                            stepper.moveTo(backoffSteps);
-                            homingStep = HOME_BACKOFF;
-                            Serial.println("[Motion] Fast approach hit endstop, backing off...");
-                        } else {
-                            float speedSteps = HOMING_DIRECTION * HOMING_SPEED_FAST_DEG_S * STEPS_PER_DEGREE;
-                            stepper.setSpeed(speedSteps);
-                            stepper.runSpeed();
-                        }
-                    } else if (homingStep == HOME_BACKOFF) {
-                        stepper.run();
-                        if (stepper.distanceToGo() == 0) {
-                            homingStep = HOME_SLOW_APPROACH;
-                            Serial.println("[Motion] Backoff complete, slow approach starting...");
-                        }
-                    } else if (homingStep == HOME_SLOW_APPROACH) {
-                        if (isEndstopPressed()) {
-                            // Precise endstop hit!
-                            stepper.setCurrentPosition(0);
-                            isHomed = true;
-                            targetAngleDeg = 0.0f;
-                            setState(STATE_IDLE);
-                            Serial.println("[Motion] Homing successfully completed! Origin 0.0° set.");
-                        } else {
-                            float speedSteps = HOMING_DIRECTION * HOMING_SPEED_SLOW_DEG_S * STEPS_PER_DEGREE;
-                            stepper.setSpeed(speedSteps);
-                            stepper.runSpeed();
-                        }
-                    }
-                    break;
-                }
-
-                case STATE_MOVING: {
-                    stepper.run();
-                    if (stepper.distanceToGo() == 0) {
-                        setState(STATE_IDLE);
-                        Serial.println("[Motion] Target position reached.");
-                    }
-                    break;
-                }
-
-                case STATE_IDLE:
-                case STATE_STOPPED:
-                case STATE_ERROR:
-                default:
-                    break;
+        if (state == STATE_MOVING) {
+            stepper.run();
+            if (stepper.distanceToGo() == 0) {
+                setState(STATE_IDLE);
+                Serial.println("[Motion] Цільову позицію досягнуто.");
             }
-
-            xSemaphoreGive(mutex);
+        } else if (state == STATE_HOMING) {
+            if ((millis() - homingStartTime) > (HOMING_TIMEOUT_SEC * 1000UL)) {
+                stepper.stop();
+                setState(STATE_ERROR, "Таймаут калібрування: кінцевик не спрацював");
+                Serial.println("[Motion] Помилка: Таймаут калібрування!");
+            } else if (homingStep == HOME_FAST_APPROACH) {
+                if (isEndstopPressed()) {
+                    stepper.setCurrentPosition(0);
+                    long backoffSteps = -cfg.homingDirection * degToSteps(HOMING_BACKOFF_DEG);
+                    stepper.setMaxSpeed(HOMING_SPEED_FAST_DEG_S * currentStepsPerDegree);
+                    stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
+                    stepper.moveTo(backoffSteps);
+                    homingStep = HOME_BACKOFF;
+                    Serial.println("[Motion] Швидкий підхід торкнувся кінцевика, відкат...");
+                } else {
+                    float speedSteps = cfg.homingDirection * HOMING_SPEED_FAST_DEG_S * currentStepsPerDegree;
+                    stepper.setSpeed(speedSteps);
+                    stepper.runSpeed();
+                }
+            } else if (homingStep == HOME_BACKOFF) {
+                stepper.run();
+                if (stepper.distanceToGo() == 0) {
+                    homingStep = HOME_SLOW_APPROACH;
+                    Serial.println("[Motion] Початок повільного точного підходу до кінцевика...");
+                }
+            } else if (homingStep == HOME_SLOW_APPROACH) {
+                if (isEndstopPressed()) {
+                    stepper.stop();
+                    stepper.setCurrentPosition(0);
+                    targetAngleDeg = 0.0f;
+                    isHomed = true;
+                    setState(STATE_IDLE);
+                    Serial.println("[Motion] Точне торкання, калібрування завершено! Позицію встановлено в 0.0°");
+                } else {
+                    float speedSteps = cfg.homingDirection * HOMING_SPEED_SLOW_DEG_S * currentStepsPerDegree;
+                    stepper.setSpeed(speedSteps);
+                    stepper.runSpeed();
+                }
+            }
         }
 
-        // Periodic yield to feed watchdog and allow FreeRTOS context switching
-        if (state == STATE_MOVING || state == STATE_HOMING) {
-            // High rate execution with small yield every ~2ms
-            if (millis() - lastYieldTime >= 2) {
-                lastYieldTime = millis();
-                taskYIELD();
-            }
-        } else {
-            // Idle state: sleep for 10ms to save CPU
+        // Керування паузами та скидання сторожового таймера на Core 0
+        if (state == STATE_IDLE || state == STATE_STOPPED || state == STATE_ERROR) {
             vTaskDelay(pdMS_TO_TICKS(10));
             lastYieldTime = millis();
+        } else {
+            // Під час активного обертання робимо мікро-паузу 1 мс кожні 5 мс
+            uint32_t now = millis();
+            if (now - lastYieldTime >= 5) {
+                lastYieldTime = now;
+                vTaskDelay(1);
+            }
         }
     }
 }

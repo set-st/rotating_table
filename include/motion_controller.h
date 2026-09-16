@@ -3,14 +3,16 @@
 #include <AccelStepper.h>
 #include "config.h"
 
+// Стани контролера руху
 enum MotionState {
-    STATE_IDLE,
-    STATE_HOMING,
-    STATE_MOVING,
-    STATE_STOPPED,
-    STATE_ERROR
+    STATE_IDLE,    // Очікування команд
+    STATE_HOMING,  // Процес пошуку кінцевика та калібрування
+    STATE_MOVING,  // Обертання до цільового кута
+    STATE_STOPPED, // Екстрена зупинка
+    STATE_ERROR    // Помилка (наприклад, таймаут кінцевика)
 };
 
+// Знімок поточного стану для передачі через API
 struct MotionStatus {
     MotionState state;
     const char* stateStr;
@@ -22,67 +24,122 @@ struct MotionStatus {
     char errorMessage[64];
 };
 
+// Повна апаратна конфігурація столу (зберігається в NVS)
+struct HardwareConfig {
+    // Призначення пінів GPIO ESP32
+    int pinStep;
+    int pinDir;
+    int pinEnable;
+    int pinEndstop;
+
+    // Напрямок та кінцевик
+    bool invertDir;
+    bool endstopInverted;
+    uint32_t endstopDebounceMs;
+
+    // Кінематика та зубчасті передачі
+    float motorTeeth;   // Кількість зубів шестерні мотора (наприклад, 20)
+    float tableTeeth;   // Кількість зубів шестерні столу (наприклад, 60)
+    float stepsPerRev;  // Кроків на оберт двигуна (200 для 1.8°, 400 для 0.9°)
+    float microsteps;   // Мікрокрок драйвера (1, 2, 4, 8, 16, 32...)
+
+    // Швидкість та прискорення
+    float defaultSpeed; // Стандартна швидкість (град/с)
+    float maxSpeed;     // Максимальна швидкість (град/с)
+    float acceleration; // Прискорення (град/с^2)
+
+    // Калібрування (Homing)
+    int homingDirection; // -1 (вліво) або +1 (вправо)
+    bool autoHomeOnBoot; // Автоматичний пошук нуля при увімкненні
+
+    // Розрахунок передаточного числа: Зуби столу / Зуби мотора
+    float getGearRatio() const {
+        if (motorTeeth > 0.0f && tableTeeth > 0.0f) {
+            return tableTeeth / motorTeeth;
+        }
+        return 1.0f;
+    }
+
+    // Розрахунок кількості імпульсів (кроків) на 1 градус повороту столу
+    float getStepsPerDegree() const {
+        float ratio = getGearRatio();
+        return (stepsPerRev * microsteps * ratio) / 360.0f;
+    }
+};
+
 class MotionController {
 public:
     MotionController();
     ~MotionController();
 
-    // Initialize pins and start FreeRTOS background motion task
+    // Ініціалізація пінів, зчитування налаштувань та запуск фонового завдання FreeRTOS
     bool begin();
 
-    // Trigger homing sequence (returns false if already busy homing)
+    // Запуск процедури пошуку кінцевика (калібрування нуля)
     bool startHoming();
 
-    // Command rotation to an angle
-    // - angleDeg: target angle in degrees (absolute or relative)
-    // - speedDegS: speed in degrees per second (<= 0 will use DEFAULT_SPEED_DEG_S)
-    // - relative: if true, adds angleDeg to current position; if false, moves to absolute angleDeg
+    // Команда повороту столу на кут
     bool moveTo(float angleDeg, float speedDegS = 0.0f, bool relative = false);
 
-    // Immediate stop
+    // Негайна аварійна зупинка двигуна
     void emergencyStop();
 
-    // Set current position as 0 degrees without moving
+    // Встановлення поточної позиції як 0.0° без руху
     void setZero();
 
-    // Enable / disable stepper driver outputs
+    // Увімкнення / вимкнення виходів драйвера двигуна (Enable)
     void setDriverEnabled(bool enable);
 
-    // Get snapshot of current controller status (thread-safe)
+    // Отримання знімка поточного стану (атомарне та швидке читання для Web UI)
     MotionStatus getStatus();
 
-    // Check directly if endstop is currently pressed
+    // Перевірка стану кінцевика з урахуванням інверсії та фільтрації брязкоту
     bool isEndstopPressed();
+
+    // Отримання та застосування апаратних налаштувань
+    HardwareConfig getConfig() const;
+    bool applyConfig(const HardwareConfig& newCfg, bool& rebootRequired);
+
+    float getStepsPerDegree() const;
 
 private:
     AccelStepper stepper;
     TaskHandle_t motionTaskHandle;
     SemaphoreHandle_t mutex;
 
-    MotionState state;
-    bool isHomed;
-    float targetAngleDeg;
-    float requestedSpeedDegS;
+    HardwareConfig cfg;
+    float currentStepsPerDegree;
+
+    volatile MotionState state;
+    volatile bool isHomed;
+    volatile float targetAngleDeg;
+    volatile float requestedSpeedDegS;
     char lastError[64];
 
-    // Homing internal sub-states
+    uint32_t endstopTriggerStartTime;
+
+    // Підкроки процедури калібрування
     enum HomingStep {
-        HOME_FAST_APPROACH,
-        HOME_BACKOFF,
-        HOME_SLOW_APPROACH,
-        HOME_COMPLETE
+        HOME_FAST_APPROACH, // Швидкий підхід
+        HOME_BACKOFF,       // Відкат назад
+        HOME_SLOW_APPROACH, // Повільне точне торкання
+        HOME_COMPLETE       // Завершено
     };
     HomingStep homingStep;
     uint32_t homingStartTime;
 
-    // FreeRTOS background task function
+    // Функція фонового завдання FreeRTOS
     static void motionTaskEntry(void* parameter);
     void motionLoop();
 
-    // Internal helpers
+    // Допоміжні функції перерахунку кроків і кутів
     long degToSteps(float deg) const;
     float stepsToDeg(long steps) const;
     void setState(MotionState newState, const char* errorMsg = nullptr);
+
+    void loadConfig();
+    void saveConfig();
+    void applyKinematics();
 };
 
 extern MotionController motionCtrl;

@@ -14,13 +14,24 @@ private:
     void setupRoutes();
     void sendCorsHeaders();
 
-    // Route handlers
+    // Обробники маршрутів HTTP API
     void handleRoot();
     void handleStatus();
     void handleHome();
     void handleMove();
     void handleStop();
     void handleZero();
+
+    // Налаштування кінцевика та параметрів столу
+    void handleGetSettings();
+    void handleSaveSettings();
+
+    // Налаштування Wi-Fi
+    void handleWiFiConfig();
+    void handleWiFiScan();
+    void handleWiFiSave();
+    void handleWiFiReset();
+
     void handleNotFound();
     void handleOptions();
 };
