@@ -206,10 +206,16 @@ void TableWebServer::handleGetSettings() {
     doc["pin_dir"] = cfg.pinDir;
     doc["pin_enable"] = cfg.pinEnable;
     doc["pin_endstop"] = cfg.pinEndstop;
+    doc["pin_button_left"] = cfg.pinButtonLeft;
+    doc["pin_button_right"] = cfg.pinButtonRight;
+    doc["pin_button_stop"] = cfg.pinButtonStop;
 
     doc["invert_dir"] = cfg.invertDir;
     doc["endstop_inverted"] = cfg.endstopInverted;
     doc["endstop_debounce_ms"] = cfg.endstopDebounceMs;
+    doc["button_left_inverted"] = cfg.buttonLeftInverted;
+    doc["button_right_inverted"] = cfg.buttonRightInverted;
+    doc["button_stop_inverted"] = cfg.buttonStopInverted;
 
     doc["motor_teeth"] = cfg.motorTeeth;
     doc["table_teeth"] = cfg.tableTeeth;
@@ -221,6 +227,8 @@ void TableWebServer::handleGetSettings() {
     doc["default_speed"] = cfg.defaultSpeed;
     doc["max_speed"] = cfg.maxSpeed;
     doc["acceleration"] = cfg.acceleration;
+    doc["button_move_speed"] = cfg.buttonMoveSpeed;
+    doc["button_move_angle"] = cfg.buttonMoveAngle;
 
     doc["homing_direction"] = cfg.homingDirection;
     doc["auto_home_on_boot"] = cfg.autoHomeOnBoot;
@@ -261,10 +269,16 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["pin_dir"].is<int>()) cfg.pinDir = reqDoc["pin_dir"].as<int>();
     if (reqDoc["pin_enable"].is<int>()) cfg.pinEnable = reqDoc["pin_enable"].as<int>();
     if (reqDoc["pin_endstop"].is<int>()) cfg.pinEndstop = reqDoc["pin_endstop"].as<int>();
+    if (reqDoc["pin_button_left"].is<int>()) cfg.pinButtonLeft = reqDoc["pin_button_left"].as<int>();
+    if (reqDoc["pin_button_right"].is<int>()) cfg.pinButtonRight = reqDoc["pin_button_right"].as<int>();
+    if (reqDoc["pin_button_stop"].is<int>()) cfg.pinButtonStop = reqDoc["pin_button_stop"].as<int>();
 
     if (reqDoc["invert_dir"].is<bool>()) cfg.invertDir = reqDoc["invert_dir"].as<bool>();
     if (reqDoc["endstop_inverted"].is<bool>()) cfg.endstopInverted = reqDoc["endstop_inverted"].as<bool>();
     if (reqDoc["endstop_debounce_ms"].is<uint32_t>()) cfg.endstopDebounceMs = reqDoc["endstop_debounce_ms"].as<uint32_t>();
+    if (reqDoc["button_left_inverted"].is<bool>()) cfg.buttonLeftInverted = reqDoc["button_left_inverted"].as<bool>();
+    if (reqDoc["button_right_inverted"].is<bool>()) cfg.buttonRightInverted = reqDoc["button_right_inverted"].as<bool>();
+    if (reqDoc["button_stop_inverted"].is<bool>()) cfg.buttonStopInverted = reqDoc["button_stop_inverted"].as<bool>();
 
     if (reqDoc["motor_teeth"].is<float>()) cfg.motorTeeth = reqDoc["motor_teeth"].as<float>();
     if (reqDoc["table_teeth"].is<float>()) cfg.tableTeeth = reqDoc["table_teeth"].as<float>();
@@ -274,6 +288,18 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["default_speed"].is<float>()) cfg.defaultSpeed = reqDoc["default_speed"].as<float>();
     if (reqDoc["max_speed"].is<float>()) cfg.maxSpeed = reqDoc["max_speed"].as<float>();
     if (reqDoc["acceleration"].is<float>()) cfg.acceleration = reqDoc["acceleration"].as<float>();
+    if (reqDoc["button_move_speed"].is<float>()) cfg.buttonMoveSpeed = reqDoc["button_move_speed"].as<float>();
+    if (reqDoc["button_move_angle"].is<float>()) cfg.buttonMoveAngle = reqDoc["button_move_angle"].as<float>();
+
+    if (cfg.buttonMoveSpeed <= 0.0f || cfg.buttonMoveAngle <= 0.0f) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Швидкість та кут апаратних кнопок повинні бути більшими за 0";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
 
     if (reqDoc["homing_direction"].is<int>()) cfg.homingDirection = reqDoc["homing_direction"].as<int>();
     if (reqDoc["auto_home_on_boot"].is<bool>()) cfg.autoHomeOnBoot = reqDoc["auto_home_on_boot"].as<bool>();

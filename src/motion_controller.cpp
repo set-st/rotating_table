@@ -11,7 +11,9 @@ MotionController::MotionController()
       currentStepsPerDegree(STEPS_PER_DEGREE), state(STATE_IDLE),
       isHomed(false), targetAngleDeg(0.0f),
       requestedSpeedDegS(DEFAULT_SPEED_DEG_S), endstopTriggerStartTime(0),
-      homingStep(HOME_FAST_APPROACH), homingStartTime(0) {
+      previousButtonLeft(false), previousButtonRight(false),
+      previousButtonStop(false), homingStep(HOME_FAST_APPROACH),
+      homingStartTime(0) {
   memset(lastError, 0, sizeof(lastError));
 
   // Початкові налаштування за замовчуванням
@@ -19,10 +21,16 @@ MotionController::MotionController()
   cfg.pinDir = PIN_DIR;
   cfg.pinEnable = PIN_ENABLE;
   cfg.pinEndstop = PIN_ENDSTOP;
+  cfg.pinButtonLeft = PIN_BUTTON_LEFT;
+  cfg.pinButtonRight = PIN_BUTTON_RIGHT;
+  cfg.pinButtonStop = PIN_BUTTON_STOP;
 
   cfg.invertDir = INVERT_DIR;
   cfg.endstopInverted = DEFAULT_ENDSTOP_INVERTED;
   cfg.endstopDebounceMs = DEFAULT_ENDSTOP_DEBOUNCE_MS;
+  cfg.buttonLeftInverted = BUTTON_LEFT_INVERTED;
+  cfg.buttonRightInverted = BUTTON_RIGHT_INVERTED;
+  cfg.buttonStopInverted = BUTTON_STOP_INVERTED;
 
   cfg.motorTeeth = 20.0f;
   cfg.tableTeeth = 60.0f;
@@ -32,6 +40,8 @@ MotionController::MotionController()
   cfg.defaultSpeed = DEFAULT_SPEED_DEG_S;
   cfg.maxSpeed = MAX_SPEED_DEG_S;
   cfg.acceleration = DEFAULT_ACCEL_DEG_S2;
+  cfg.buttonMoveSpeed = BUTTON_MOVE_SPEED_DEG_S;
+  cfg.buttonMoveAngle = BUTTON_MOVE_ANGLE_DEG;
 
   cfg.homingDirection = HOMING_DIRECTION;
   cfg.autoHomeOnBoot = AUTO_HOME_ON_BOOT;
@@ -53,11 +63,20 @@ void MotionController::loadConfig() {
     cfg.pinDir = prefs.getInt("p_dir", PIN_DIR);
     cfg.pinEnable = prefs.getInt("p_en", PIN_ENABLE);
     cfg.pinEndstop = prefs.getInt("p_es", PIN_ENDSTOP);
+    cfg.pinButtonLeft = prefs.getInt("p_btn_l", PIN_BUTTON_LEFT);
+    cfg.pinButtonRight = prefs.getInt("p_btn_r", PIN_BUTTON_RIGHT);
+    cfg.pinButtonStop = prefs.getInt("p_btn_s", PIN_BUTTON_STOP);
 
     cfg.invertDir = prefs.getBool("inv_dir", INVERT_DIR);
     cfg.endstopInverted = prefs.getBool("es_inv", DEFAULT_ENDSTOP_INVERTED);
     cfg.endstopDebounceMs =
         prefs.getUInt("es_deb", DEFAULT_ENDSTOP_DEBOUNCE_MS);
+    cfg.buttonLeftInverted =
+        prefs.getBool("btn_l_inv", BUTTON_LEFT_INVERTED);
+    cfg.buttonRightInverted =
+        prefs.getBool("btn_r_inv", BUTTON_RIGHT_INVERTED);
+    cfg.buttonStopInverted =
+        prefs.getBool("btn_s_inv", BUTTON_STOP_INVERTED);
 
     cfg.motorTeeth = prefs.getFloat("m_teeth", 20.0f);
     cfg.tableTeeth = prefs.getFloat("t_teeth", 60.0f);
@@ -67,6 +86,10 @@ void MotionController::loadConfig() {
     cfg.defaultSpeed = prefs.getFloat("def_spd", DEFAULT_SPEED_DEG_S);
     cfg.maxSpeed = prefs.getFloat("max_spd", MAX_SPEED_DEG_S);
     cfg.acceleration = prefs.getFloat("accel", DEFAULT_ACCEL_DEG_S2);
+    cfg.buttonMoveSpeed =
+        prefs.getFloat("btn_spd", BUTTON_MOVE_SPEED_DEG_S);
+    cfg.buttonMoveAngle =
+        prefs.getFloat("btn_ang", BUTTON_MOVE_ANGLE_DEG);
 
     cfg.homingDirection = prefs.getInt("home_dir", HOMING_DIRECTION);
     cfg.autoHomeOnBoot = prefs.getBool("boot_home", AUTO_HOME_ON_BOOT);
@@ -83,10 +106,16 @@ void MotionController::saveConfig() {
     prefs.putInt("p_dir", cfg.pinDir);
     prefs.putInt("p_en", cfg.pinEnable);
     prefs.putInt("p_es", cfg.pinEndstop);
+    prefs.putInt("p_btn_l", cfg.pinButtonLeft);
+    prefs.putInt("p_btn_r", cfg.pinButtonRight);
+    prefs.putInt("p_btn_s", cfg.pinButtonStop);
 
     prefs.putBool("inv_dir", cfg.invertDir);
     prefs.putBool("es_inv", cfg.endstopInverted);
     prefs.putUInt("es_deb", cfg.endstopDebounceMs);
+    prefs.putBool("btn_l_inv", cfg.buttonLeftInverted);
+    prefs.putBool("btn_r_inv", cfg.buttonRightInverted);
+    prefs.putBool("btn_s_inv", cfg.buttonStopInverted);
 
     prefs.putFloat("m_teeth", cfg.motorTeeth);
     prefs.putFloat("t_teeth", cfg.tableTeeth);
@@ -96,6 +125,8 @@ void MotionController::saveConfig() {
     prefs.putFloat("def_spd", cfg.defaultSpeed);
     prefs.putFloat("max_spd", cfg.maxSpeed);
     prefs.putFloat("accel", cfg.acceleration);
+    prefs.putFloat("btn_spd", cfg.buttonMoveSpeed);
+    prefs.putFloat("btn_ang", cfg.buttonMoveAngle);
 
     prefs.putInt("home_dir", cfg.homingDirection);
     prefs.putBool("boot_home", cfg.autoHomeOnBoot);
@@ -127,7 +158,10 @@ bool MotionController::applyConfig(const HardwareConfig &newCfg,
   rebootRequired =
       (newCfg.pinStep != cfg.pinStep || newCfg.pinDir != cfg.pinDir ||
        newCfg.pinEnable != cfg.pinEnable ||
-       newCfg.pinEndstop != cfg.pinEndstop);
+       newCfg.pinEndstop != cfg.pinEndstop ||
+       newCfg.pinButtonLeft != cfg.pinButtonLeft ||
+       newCfg.pinButtonRight != cfg.pinButtonRight ||
+       newCfg.pinButtonStop != cfg.pinButtonStop);
 
   cfg = newCfg;
   saveConfig();
@@ -155,6 +189,21 @@ bool MotionController::begin() {
 
   // Налаштування піна кінцевика
   pinMode(cfg.pinEndstop, ENDSTOP_PULLUP ? INPUT_PULLUP : INPUT);
+  if (cfg.pinButtonLeft >= 0) {
+    pinMode(cfg.pinButtonLeft, INPUT_PULLUP);
+  }
+  if (cfg.pinButtonRight >= 0) {
+    pinMode(cfg.pinButtonRight, INPUT_PULLUP);
+  }
+  if (cfg.pinButtonStop >= 0) {
+    pinMode(cfg.pinButtonStop, INPUT_PULLUP);
+  }
+  previousButtonLeft =
+      isButtonPressed(cfg.pinButtonLeft, cfg.buttonLeftInverted);
+  previousButtonRight =
+      isButtonPressed(cfg.pinButtonRight, cfg.buttonRightInverted);
+  previousButtonStop =
+      isButtonPressed(cfg.pinButtonStop, cfg.buttonStopInverted);
 
   // Налаштування піна Enable драйвера
   if (cfg.pinEnable >= 0) {
@@ -217,6 +266,39 @@ bool MotionController::isEndstopPressed() {
   } else {
     endstopTriggerStartTime = 0;
     return false;
+  }
+}
+
+bool MotionController::isButtonPressed(int pin, bool inverted) const {
+  if (pin < 0) {
+    return false;
+  }
+  return digitalRead(pin) == (inverted ? HIGH : LOW);
+}
+
+void MotionController::handleHardwareButtons() {
+  const bool left =
+      isButtonPressed(cfg.pinButtonLeft, cfg.buttonLeftInverted);
+  const bool right =
+      isButtonPressed(cfg.pinButtonRight, cfg.buttonRightInverted);
+  const bool stop =
+      isButtonPressed(cfg.pinButtonStop, cfg.buttonStopInverted);
+
+  const bool leftPressed = left && !previousButtonLeft;
+  const bool rightPressed = right && !previousButtonRight;
+  const bool stopPressed = stop && !previousButtonStop;
+  previousButtonLeft = left;
+  previousButtonRight = right;
+  previousButtonStop = stop;
+
+  if (stopPressed || (stop && (state == STATE_MOVING ||
+                               state == STATE_HOMING))) {
+    emergencyStop();
+  } else if (state != STATE_HOMING && state != STATE_MOVING &&
+             (leftPressed || rightPressed)) {
+    const float angle = leftPressed ? -cfg.buttonMoveAngle
+                                    : cfg.buttonMoveAngle;
+    moveTo(angle, cfg.buttonMoveSpeed, true);
   }
 }
 
@@ -378,6 +460,7 @@ void MotionController::motionLoop() {
   uint32_t lastYieldTime = millis();
 
   while (true) {
+    handleHardwareButtons();
     if (state == STATE_MOVING) {
       stepper.run();
       if (stepper.distanceToGo() == 0) {

@@ -33,6 +33,16 @@ constexpr uint32_t DEFAULT_ENDSTOP_DEBOUNCE_MS = 10;
 // Встановіть true, якщо двигун обертається у зворотний бік
 constexpr bool INVERT_DIR = false;
 
+// Апаратні кнопки керування (активний рівень можна змінити у веб-інтерфейсі)
+constexpr int PIN_BUTTON_LEFT = 25;
+constexpr int PIN_BUTTON_RIGHT = 26;
+constexpr int PIN_BUTTON_STOP = 27;
+constexpr bool BUTTON_LEFT_INVERTED = false;
+constexpr bool BUTTON_RIGHT_INVERTED = false;
+constexpr bool BUTTON_STOP_INVERTED = false;
+constexpr float BUTTON_MOVE_SPEED_DEG_S = 3.0f;
+constexpr float BUTTON_MOVE_ANGLE_DEG = 1.0f;
+
 // =============================================================================
 // МЕХАНІКА ТА КІНЕМАТИКА
 // =============================================================================

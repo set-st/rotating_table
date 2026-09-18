@@ -31,11 +31,17 @@ struct HardwareConfig {
     int pinDir;
     int pinEnable;
     int pinEndstop;
+    int pinButtonLeft;
+    int pinButtonRight;
+    int pinButtonStop;
 
     // Напрямок та кінцевик
     bool invertDir;
     bool endstopInverted;
     uint32_t endstopDebounceMs;
+    bool buttonLeftInverted;
+    bool buttonRightInverted;
+    bool buttonStopInverted;
 
     // Кінематика та зубчасті передачі
     float motorTeeth;   // Кількість зубів шестерні мотора (наприклад, 20)
@@ -47,6 +53,10 @@ struct HardwareConfig {
     float defaultSpeed; // Стандартна швидкість (град/с)
     float maxSpeed;     // Максимальна швидкість (град/с)
     float acceleration; // Прискорення (град/с^2)
+
+    // Керування апаратними кнопками
+    float buttonMoveSpeed;
+    float buttonMoveAngle;
 
     // Калібрування (Homing)
     int homingDirection; // -1 (вліво) або +1 (вправо)
@@ -117,6 +127,9 @@ private:
     char lastError[64];
 
     uint32_t endstopTriggerStartTime;
+    bool previousButtonLeft;
+    bool previousButtonRight;
+    bool previousButtonStop;
 
     // Підкроки процедури калібрування
     enum HomingStep {
@@ -140,6 +153,8 @@ private:
     void loadConfig();
     void saveConfig();
     void applyKinematics();
+    bool isButtonPressed(int pin, bool inverted) const;
+    void handleHardwareButtons();
 };
 
 extern MotionController motionCtrl;

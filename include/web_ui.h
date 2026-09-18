@@ -552,6 +552,48 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           </div>
         </div>
 
+        <div class="section-title" style="margin-top: 14px;">Апаратні кнопки</div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+          Одне натискання виконує відносний поворот на заданий кут. Кнопка STOP
+          негайно зупиняє двигун.
+        </p>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="inputPinButtonLeft">Пін кнопки «Вліво»:</label>
+            <input type="number" id="inputPinButtonLeft" value="25">
+          </div>
+          <div class="form-group">
+            <label for="inputPinButtonRight">Пін кнопки «Вправо»:</label>
+            <input type="number" id="inputPinButtonRight" value="26">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="inputPinButtonStop">Пін кнопки «STOP»:</label>
+          <input type="number" id="inputPinButtonStop" value="27">
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="chkButtonLeftInvert" style="width: 20px; height: 20px; cursor: pointer;">
+          <label for="chkButtonLeftInvert" style="margin-bottom: 0; cursor: pointer; color: var(--text);">Інвертувати кнопку «Вліво»</label>
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="chkButtonRightInvert" style="width: 20px; height: 20px; cursor: pointer;">
+          <label for="chkButtonRightInvert" style="margin-bottom: 0; cursor: pointer; color: var(--text);">Інвертувати кнопку «Вправо»</label>
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="chkButtonStopInvert" style="width: 20px; height: 20px; cursor: pointer;">
+          <label for="chkButtonStopInvert" style="margin-bottom: 0; cursor: pointer; color: var(--text);">Інвертувати кнопку «STOP»</label>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="inputButtonSpeed">Швидкість кнопок (°/с):</label>
+            <input type="number" id="inputButtonSpeed" value="3" min="1" step="0.1">
+          </div>
+          <div class="form-group">
+            <label for="inputButtonAngle">Кут за натискання (°):</label>
+            <input type="number" id="inputButtonAngle" value="1" min="0.1" step="0.1">
+          </div>
+        </div>
+
         <div class="btn-row" style="margin-top: 16px;">
           <button id="btnSaveSettings" class="btn-success" style="flex: 1;" onclick="saveHardwareSettings()">
             💾 Зберегти конфігурацію столу
@@ -798,6 +840,14 @@ POST /api/wifi/reset</pre>
       document.getElementById('inputPinDir').value = res.pin_dir ?? 19;
       document.getElementById('inputPinEnable').value = res.pin_enable ?? 5;
       document.getElementById('inputPinEndstop').value = res.pin_endstop ?? 4;
+      document.getElementById('inputPinButtonLeft').value = res.pin_button_left ?? 25;
+      document.getElementById('inputPinButtonRight').value = res.pin_button_right ?? 26;
+      document.getElementById('inputPinButtonStop').value = res.pin_button_stop ?? 27;
+      document.getElementById('chkButtonLeftInvert').checked = !!res.button_left_inverted;
+      document.getElementById('chkButtonRightInvert').checked = !!res.button_right_inverted;
+      document.getElementById('chkButtonStopInvert').checked = !!res.button_stop_inverted;
+      document.getElementById('inputButtonSpeed').value = res.button_move_speed ?? 3;
+      document.getElementById('inputButtonAngle').value = res.button_move_angle ?? 1;
 
       recalcKinematics();
     }
@@ -822,7 +872,15 @@ POST /api/wifi/reset</pre>
         pin_step: parseInt(document.getElementById('inputPinStep').value),
         pin_dir: parseInt(document.getElementById('inputPinDir').value),
         pin_enable: parseInt(document.getElementById('inputPinEnable').value),
-        pin_endstop: parseInt(document.getElementById('inputPinEndstop').value)
+        pin_endstop: parseInt(document.getElementById('inputPinEndstop').value),
+        pin_button_left: parseInt(document.getElementById('inputPinButtonLeft').value),
+        pin_button_right: parseInt(document.getElementById('inputPinButtonRight').value),
+        pin_button_stop: parseInt(document.getElementById('inputPinButtonStop').value),
+        button_left_inverted: document.getElementById('chkButtonLeftInvert').checked,
+        button_right_inverted: document.getElementById('chkButtonRightInvert').checked,
+        button_stop_inverted: document.getElementById('chkButtonStopInvert').checked,
+        button_move_speed: parseFloat(document.getElementById('inputButtonSpeed').value),
+        button_move_angle: parseFloat(document.getElementById('inputButtonAngle').value)
       };
 
       const btn = document.getElementById('btnSaveSettings');
