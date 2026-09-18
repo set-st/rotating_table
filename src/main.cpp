@@ -3,6 +3,7 @@
 #include "motion_controller.h"
 #include "wifi_manager.h"
 #include "web_server.h"
+#include "imu_sensor.h"
 
 void setup() {
     Serial.begin(115200);
@@ -15,6 +16,10 @@ void setup() {
     // 1. Ініціалізація контролера руху та фонового завдання FreeRTOS
     if (!motionCtrl.begin()) {
         Serial.println("[Error] Помилка ініціалізації контролера руху!");
+    }
+
+    if (!imuSensor.begin()) {
+        Serial.println("[Error] Помилка ініціалізації GY-87/MPU6050!");
     }
 
     // 2. Налаштування мережі Wi-Fi (зчитування NVS або fallback на config.h, mDNS)
@@ -36,6 +41,7 @@ void setup() {
 void loop() {
     // Обробка вхідних HTTP-запитів
     webServer.handleClient();
+    imuSensor.update();
 
     // Обробка запланованого відкладеного перезавантаження після зміни налаштувань
     wifiMgr.handle();

@@ -3,6 +3,7 @@
 #include "motion_controller.h"
 #include "wifi_manager.h"
 #include "config.h"
+#include "imu_sensor.h"
 #include <ArduinoJson.h>
 
 TableWebServer webServer;
@@ -41,6 +42,7 @@ void TableWebServer::setupRoutes() {
     server.on("/api/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/settings", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/imu/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/config", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/save", HTTP_OPTIONS, [this]() { handleOptions(); });
@@ -56,6 +58,7 @@ void TableWebServer::setupRoutes() {
     // Налаштування кінцевика
     server.on("/api/settings", HTTP_GET, [this]() { handleGetSettings(); });
     server.on("/api/settings", HTTP_POST, [this]() { handleSaveSettings(); });
+    server.on("/api/imu/scan", HTTP_GET, [this]() { handleImuScan(); });
 
     // Налаштування Wi-Fi
     server.on("/api/wifi/config", HTTP_GET, [this]() { handleWiFiConfig(); });
@@ -84,10 +87,37 @@ void TableWebServer::handleStatus() {
     doc["speed"] = st.currentSpeed;
     doc["is_homed"] = st.isHomed;
     doc["endstop_triggered"] = st.endstopTriggered;
+    ImuStatus imu = imuSensor.getStatus();
+    doc["imu_initialized"] = imu.initialized;
+    doc["imu_mpu6050_connected"] = imu.mpu6050Connected;
+    doc["imu_barometer_connected"] = imu.barometerConnected;
+    doc["imu_pitch_deg"] = imu.pitchDeg;
+    doc["imu_roll_deg"] = imu.rollDeg;
+    doc["imu_gyro_x_dps"] = imu.gyroXDegS;
+    doc["imu_gyro_y_dps"] = imu.gyroYDegS;
+    doc["imu_gyro_z_dps"] = imu.gyroZDegS;
+    doc["imu_updated_ms"] = imu.updatedAtMs;
+    if (strlen(imu.errorMessage) > 0) {
+        doc["imu_error"] = imu.errorMessage;
+    }
     if (strlen(st.errorMessage) > 0) {
         doc["error"] = st.errorMessage;
     }
 
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+}
+
+void TableWebServer::handleImuScan() {
+    sendCorsHeaders();
+    ImuScanResult scan = imuSensor.scanBus();
+    JsonDocument doc;
+    doc["status"] = "ok";
+    JsonArray addresses = doc["addresses"].to<JsonArray>();
+    for (uint8_t i = 0; i < scan.count; ++i) {
+        addresses.add(scan.addresses[i]);
+    }
     String response;
     serializeJson(doc, response);
     server.send(200, "application/json", response);
@@ -232,6 +262,11 @@ void TableWebServer::handleGetSettings() {
 
     doc["homing_direction"] = cfg.homingDirection;
     doc["auto_home_on_boot"] = cfg.autoHomeOnBoot;
+    ImuConfig imuCfg = imuSensor.getConfig();
+    doc["i2c_sda_pin"] = imuCfg.sdaPin;
+    doc["i2c_scl_pin"] = imuCfg.sclPin;
+    doc["mpu6050_address"] = imuCfg.mpu6050Address;
+    doc["barometer_address"] = imuCfg.barometerAddress;
 
     String res;
     serializeJson(doc, res);
@@ -304,15 +339,46 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["homing_direction"].is<int>()) cfg.homingDirection = reqDoc["homing_direction"].as<int>();
     if (reqDoc["auto_home_on_boot"].is<bool>()) cfg.autoHomeOnBoot = reqDoc["auto_home_on_boot"].as<bool>();
 
+    ImuConfig imuCfg = imuSensor.getConfig();
+    if (reqDoc["i2c_sda_pin"].is<int>()) imuCfg.sdaPin = reqDoc["i2c_sda_pin"].as<int>();
+    if (reqDoc["i2c_scl_pin"].is<int>()) imuCfg.sclPin = reqDoc["i2c_scl_pin"].as<int>();
+    if (reqDoc["mpu6050_address"].is<int>()) imuCfg.mpu6050Address = reqDoc["mpu6050_address"].as<int>();
+    if (reqDoc["barometer_address"].is<int>()) imuCfg.barometerAddress = reqDoc["barometer_address"].as<int>();
+
+    if (imuCfg.sdaPin < 0 || imuCfg.sclPin < 0 ||
+        imuCfg.mpu6050Address < 0x03 || imuCfg.mpu6050Address > 0x77 ||
+        imuCfg.barometerAddress < 0x03 || imuCfg.barometerAddress > 0x77) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Некоректні I2C-піни або адреси датчиків";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
+
     bool rebootRequired = false;
-    if (motionCtrl.applyConfig(cfg, rebootRequired)) {
+    bool imuRebootRequired = false;
+    if (!imuSensor.applyConfig(imuCfg, imuRebootRequired)) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Не вдалося зберегти налаштування IMU";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(500, "application/json", res);
+        return;
+    }
+    rebootRequired = imuRebootRequired;
+    bool motionRebootRequired = false;
+    if (motionCtrl.applyConfig(cfg, motionRebootRequired)) {
+        rebootRequired = rebootRequired || motionRebootRequired;
         if (rebootRequired) {
             wifiMgr.scheduleRestart(1500);
         }
 
         JsonDocument respDoc;
         respDoc["status"] = "ok";
-        respDoc["message"] = rebootRequired ? "Піни змінено. Контролер перезавантажується..."
+        respDoc["message"] = rebootRequired ? "Апаратні або I2C-параметри змінено. Контролер перезавантажується..."
                                             : "Налаштування столу успішно застосовано";
         respDoc["reboot_required"] = rebootRequired;
         respDoc["gear_ratio"] = cfg.getGearRatio();

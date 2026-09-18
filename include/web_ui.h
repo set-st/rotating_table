@@ -367,6 +367,30 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title">
+        <span>IMU GY-87 (Live)</span>
+        <span id="badgeImu" class="badge badge-error">OFFLINE</span>
+      </div>
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="label">Нахил Pitch</div>
+          <div class="value"><span id="valImuPitch">0.00</span>°</div>
+          <div class="sub">Уперед / назад</div>
+        </div>
+        <div class="status-item">
+          <div class="label">Нахил Roll</div>
+          <div class="value"><span id="valImuRoll">0.00</span>°</div>
+          <div class="sub">Ліворуч / праворуч</div>
+        </div>
+      </div>
+      <div class="info-box" style="margin-top: 12px; margin-bottom: 0;">
+        <div>Гіроскоп X/Y/Z: <span id="valImuGyro">0.00 / 0.00 / 0.00 °/с</span></div>
+        <div>Датчики: <span id="txtImuSensors">MPU6050 — очікування</span></div>
+        <div id="txtImuError" style="color: var(--danger);"></div>
+      </div>
+    </div>
+
     <!-- КАРТКА КАЛІБРУВАННЯ ТА ОБНУЛЕННЯ -->
     <div class="card">
       <div class="card-title">Калібрування та нульова точка</div>
@@ -437,6 +461,36 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       </summary>
 
       <div style="margin-top: 10px;">
+        <div class="section-title">I2C та GY-87</div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+          Зміна I2C-пінів або адрес потребує перезавантаження контролера.
+          Типові адреси: MPU6050 — 0x68, BMP180 — 0x77.
+        </p>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="inputI2cSda">Пін I2C SDA:</label>
+            <input type="number" id="inputI2cSda" value="21" min="0">
+          </div>
+          <div class="form-group">
+            <label for="inputI2cScl">Пін I2C SCL:</label>
+            <input type="number" id="inputI2cScl" value="22" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="inputMpuAddress">Адреса MPU6050 (hex):</label>
+          <input type="text" id="inputMpuAddress" value="0x68">
+        </div>
+        <div class="form-group">
+          <label for="inputBaroAddress">Адреса BMP180 (hex):</label>
+          <input type="text" id="inputBaroAddress" value="0x77">
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" onclick="scanI2c()">🔍 Сканувати I2C</button>
+        </div>
+        <div id="txtI2cScan" class="info-box" style="margin-top: 10px; margin-bottom: 14px;">
+          Натисніть «Сканувати I2C», щоб знайти пристрої на шині.
+        </div>
+
         <!-- 1. Механіка та шестерні -->
         <div class="section-title">Зубчаста передача та редукція</div>
         <div class="grid-2">
@@ -444,6 +498,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             <label for="inputMotorTeeth">Шестерня мотора (зубів):</label>
             <input type="number" id="inputMotorTeeth" value="20" min="1" max="200" oninput="recalcKinematics()">
           </div>
+
           <div class="form-group">
             <label for="inputTableTeeth">Шестерня столу (зубів):</label>
             <input type="number" id="inputTableTeeth" value="60" min="1" max="500" oninput="recalcKinematics()">
@@ -816,6 +871,22 @@ POST /api/wifi/reset</pre>
       document.getElementById('lblLiveRatio').textContent = `Редукція: ${ratio.toFixed(2)}:1`;
     }
 
+    async function scanI2c() {
+      const output = document.getElementById('txtI2cScan');
+      output.textContent = 'Сканування I2C...';
+      const res = await apiCall('/api/imu/scan');
+      if (!res || res.status !== 'ok') {
+        output.textContent = 'Помилка сканування I2C.';
+        return;
+      }
+      if (!res.addresses || res.addresses.length === 0) {
+        output.textContent = 'Пристроїв I2C не знайдено.';
+        return;
+      }
+      output.textContent = 'Знайдені адреси: ' +
+        res.addresses.map(address => '0x' + address.toString(16).toUpperCase().padStart(2, '0')).join(', ');
+    }
+
     // --- НАЛАШТУВАННЯ АПАРАТУРИ ---
     async function loadHardwareSettings() {
       const res = await apiCall('/api/settings');
@@ -848,6 +919,10 @@ POST /api/wifi/reset</pre>
       document.getElementById('chkButtonStopInvert').checked = !!res.button_stop_inverted;
       document.getElementById('inputButtonSpeed').value = res.button_move_speed ?? 3;
       document.getElementById('inputButtonAngle').value = res.button_move_angle ?? 1;
+      document.getElementById('inputI2cSda').value = res.i2c_sda_pin ?? 21;
+      document.getElementById('inputI2cScl').value = res.i2c_scl_pin ?? 22;
+      document.getElementById('inputMpuAddress').value = '0x' + (res.mpu6050_address ?? 104).toString(16).toUpperCase();
+      document.getElementById('inputBaroAddress').value = '0x' + (res.barometer_address ?? 119).toString(16).toUpperCase();
 
       recalcKinematics();
     }
@@ -880,7 +955,11 @@ POST /api/wifi/reset</pre>
         button_right_inverted: document.getElementById('chkButtonRightInvert').checked,
         button_stop_inverted: document.getElementById('chkButtonStopInvert').checked,
         button_move_speed: parseFloat(document.getElementById('inputButtonSpeed').value),
-        button_move_angle: parseFloat(document.getElementById('inputButtonAngle').value)
+        button_move_angle: parseFloat(document.getElementById('inputButtonAngle').value),
+        i2c_sda_pin: parseInt(document.getElementById('inputI2cSda').value),
+        i2c_scl_pin: parseInt(document.getElementById('inputI2cScl').value),
+        mpu6050_address: parseInt(document.getElementById('inputMpuAddress').value, 0),
+        barometer_address: parseInt(document.getElementById('inputBaroAddress').value, 0)
       };
 
       const btn = document.getElementById('btnSaveSettings');
@@ -1060,6 +1139,17 @@ POST /api/wifi/reset</pre>
         }
 
         document.getElementById('txtError').textContent = st.error || '';
+        const imuOnline = !!st.imu_initialized && !!st.imu_mpu6050_connected;
+        document.getElementById('badgeImu').textContent = imuOnline ? 'ONLINE' : 'OFFLINE';
+        document.getElementById('badgeImu').className = 'badge ' + (imuOnline ? 'badge-idle' : 'badge-error');
+        document.getElementById('valImuPitch').textContent = (st.imu_pitch_deg || 0).toFixed(2);
+        document.getElementById('valImuRoll').textContent = (st.imu_roll_deg || 0).toFixed(2);
+        document.getElementById('valImuGyro').textContent =
+          `${(st.imu_gyro_x_dps || 0).toFixed(2)} / ${(st.imu_gyro_y_dps || 0).toFixed(2)} / ${(st.imu_gyro_z_dps || 0).toFixed(2)} °/с`;
+        document.getElementById('txtImuSensors').textContent =
+          `MPU6050: ${st.imu_mpu6050_connected ? 'OK' : '—'}; ` +
+          `BMP180: ${st.imu_barometer_connected ? 'OK' : '—'}`;
+        document.getElementById('txtImuError').textContent = st.imu_error || '';
 
         const isBusy = (st.state === 'HOMING');
         document.getElementById('btnHome').disabled = isBusy;

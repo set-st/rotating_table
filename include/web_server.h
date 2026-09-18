@@ -25,6 +25,7 @@ private:
     // Налаштування кінцевика та параметрів столу
     void handleGetSettings();
     void handleSaveSettings();
+    void handleImuScan();
 
     // Налаштування Wi-Fi
     void handleWiFiConfig();
