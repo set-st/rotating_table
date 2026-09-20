@@ -226,6 +226,15 @@ void TableWebServer::handleOtaLatest() {
 
 void TableWebServer::handleOtaUpdate() {
     sendCorsHeaders();
+    if (!wifiMgr.isConnectedSTA()) {
+        JsonDocument doc;
+        doc["status"] = "error";
+        doc["message"] = "OTA доступне лише при підключенні до роутера з Інтернетом; SoftAP не має виходу в Інтернет";
+        String response;
+        serializeJson(doc, response);
+        server.send(503, "application/json", response);
+        return;
+    }
     String error;
     const bool success = otaUpdater.installLatestRelease(error);
     JsonDocument doc;
