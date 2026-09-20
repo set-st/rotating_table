@@ -37,6 +37,8 @@ public:
     ImuStatus getStatus() const;
     ImuScanResult scanBus();
     bool applyConfig(const ImuConfig& newConfig, bool& rebootRequired);
+    bool calibrateGyro(uint16_t sampleCount = 500);
+    bool zeroOrientation();
 
 private:
     ImuConfig config;
@@ -44,6 +46,10 @@ private:
     float gyroBiasX;
     float gyroBiasY;
     float gyroBiasZ;
+    float pitchOffsetDeg;
+    float rollOffsetDeg;
+    float filteredPitchDeg;
+    float filteredRollDeg;
     uint32_t lastUpdateMs;
     uint32_t lastSampleUs;
 

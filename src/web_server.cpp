@@ -43,6 +43,10 @@ void TableWebServer::setupRoutes() {
     server.on("/api/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/settings", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/imu/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/imu/calibrate", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/imu/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/automatic/start", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/automatic/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/config", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/save", HTTP_OPTIONS, [this]() { handleOptions(); });
@@ -59,6 +63,10 @@ void TableWebServer::setupRoutes() {
     server.on("/api/settings", HTTP_GET, [this]() { handleGetSettings(); });
     server.on("/api/settings", HTTP_POST, [this]() { handleSaveSettings(); });
     server.on("/api/imu/scan", HTTP_GET, [this]() { handleImuScan(); });
+    server.on("/api/imu/calibrate", HTTP_POST, [this]() { handleImuCalibrate(); });
+    server.on("/api/imu/zero", HTTP_POST, [this]() { handleImuZero(); });
+    server.on("/api/automatic/start", HTTP_POST, [this]() { handleAutomaticStart(); });
+    server.on("/api/automatic/stop", HTTP_POST, [this]() { handleAutomaticStop(); });
 
     // Налаштування Wi-Fi
     server.on("/api/wifi/config", HTTP_GET, [this]() { handleWiFiConfig(); });
@@ -87,6 +95,10 @@ void TableWebServer::handleStatus() {
     doc["speed"] = st.currentSpeed;
     doc["is_homed"] = st.isHomed;
     doc["endstop_triggered"] = st.endstopTriggered;
+    doc["automatic_enabled"] = st.automaticEnabled;
+    doc["automatic_angle"] = st.automaticAngle;
+    doc["automatic_speed"] = st.automaticSpeed;
+    doc["automatic_interval_ms"] = st.automaticIntervalMs;
     ImuStatus imu = imuSensor.getStatus();
     doc["imu_initialized"] = imu.initialized;
     doc["imu_mpu6050_connected"] = imu.mpu6050Connected;
@@ -118,6 +130,73 @@ void TableWebServer::handleImuScan() {
     for (uint8_t i = 0; i < scan.count; ++i) {
         addresses.add(scan.addresses[i]);
     }
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+}
+
+void TableWebServer::handleImuCalibrate() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    doc["status"] = imuSensor.calibrateGyro() ? "ok" : "error";
+    if (doc["status"] == "error") {
+        doc["error"] = "Не вдалося відкалібрувати гіроскоп. Перевірте підключення та нерухомість датчика.";
+    }
+    String response;
+    serializeJson(doc, response);
+    server.send(doc["status"] == "ok" ? 200 : 500, "application/json", response);
+}
+
+void TableWebServer::handleImuZero() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    doc["status"] = imuSensor.zeroOrientation() ? "ok" : "error";
+    if (doc["status"] == "error") {
+        doc["error"] = "IMU не ініціалізовано";
+    }
+    String response;
+    serializeJson(doc, response);
+    server.send(doc["status"] == "ok" ? 200 : 500, "application/json", response);
+}
+
+void TableWebServer::handleAutomaticStart() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    if (!server.hasArg("plain") ||
+        deserializeJson(doc, server.arg("plain"))) {
+        doc["status"] = "error";
+        doc["error"] = "Некоректне тіло запиту";
+        String response;
+        serializeJson(doc, response);
+        server.send(400, "application/json", response);
+        return;
+    }
+
+    const float angle = doc["angle"] | 0.0f;
+    const float speed = doc["speed"] | 0.0f;
+    const uint32_t intervalMs = doc["interval_ms"] | 0UL;
+    JsonDocument responseDoc;
+    if (!motionCtrl.startAutomatic(angle, speed, intervalMs)) {
+        responseDoc["status"] = "error";
+        responseDoc["error"] = "Перевірте кут, швидкість та інтервал (мінімум 100 мс)";
+        String response;
+        serializeJson(responseDoc, response);
+        server.send(400, "application/json", response);
+        return;
+    }
+    responseDoc["status"] = "ok";
+    responseDoc["message"] = "Автоматичний режим запущено";
+    String response;
+    serializeJson(responseDoc, response);
+    server.send(200, "application/json", response);
+}
+
+void TableWebServer::handleAutomaticStop() {
+    sendCorsHeaders();
+    motionCtrl.stopAutomatic();
+    JsonDocument doc;
+    doc["status"] = "ok";
+    doc["message"] = "Автоматичний режим зупинено";
     String response;
     serializeJson(doc, response);
     server.send(200, "application/json", response);
@@ -204,6 +283,7 @@ void TableWebServer::handleMove() {
 
 void TableWebServer::handleStop() {
     sendCorsHeaders();
+    motionCtrl.stopAutomatic();
     motionCtrl.emergencyStop();
 
     JsonDocument doc;

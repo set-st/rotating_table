@@ -15,6 +15,8 @@ ImuSensor imuSensor;
 
 ImuSensor::ImuSensor()
     : gyroBiasX(0.0f), gyroBiasY(0.0f), gyroBiasZ(0.0f),
+      pitchOffsetDeg(0.0f), rollOffsetDeg(0.0f),
+      filteredPitchDeg(0.0f), filteredRollDeg(0.0f),
       lastUpdateMs(0), lastSampleUs(0) {
     config = {DEFAULT_I2C_SDA, DEFAULT_I2C_SCL, DEFAULT_MPU6050_ADDRESS,
               DEFAULT_BAROMETER_ADDRESS};
@@ -32,6 +34,11 @@ void ImuSensor::loadConfig() {
         prefs.getUChar("mpu_addr", DEFAULT_MPU6050_ADDRESS);
     config.barometerAddress =
         prefs.getUChar("baro_addr", DEFAULT_BAROMETER_ADDRESS);
+    gyroBiasX = prefs.getFloat("gyro_bias_x", 0.0f);
+    gyroBiasY = prefs.getFloat("gyro_bias_y", 0.0f);
+    gyroBiasZ = prefs.getFloat("gyro_bias_z", 0.0f);
+    pitchOffsetDeg = prefs.getFloat("pitch_zero", 0.0f);
+    rollOffsetDeg = prefs.getFloat("roll_zero", 0.0f);
     prefs.end();
 }
 
@@ -45,6 +52,11 @@ void ImuSensor::saveConfig() {
     prefs.putInt("scl", config.sclPin);
     prefs.putUChar("mpu_addr", config.mpu6050Address);
     prefs.putUChar("baro_addr", config.barometerAddress);
+    prefs.putFloat("gyro_bias_x", gyroBiasX);
+    prefs.putFloat("gyro_bias_y", gyroBiasY);
+    prefs.putFloat("gyro_bias_z", gyroBiasZ);
+    prefs.putFloat("pitch_zero", pitchOffsetDeg);
+    prefs.putFloat("roll_zero", rollOffsetDeg);
     prefs.end();
 }
 
@@ -93,6 +105,10 @@ bool ImuSensor::begin() {
 
     status.initialized = true;
     status.errorMessage[0] = '\0';
+    filteredPitchDeg = 0.0f;
+    filteredRollDeg = 0.0f;
+    status.pitchDeg = 0.0f;
+    status.rollDeg = 0.0f;
     lastSampleUs = micros();
     Serial.printf("[IMU] MPU6050 підключено: 0x%02X, SDA=%d, SCL=%d\n",
                   config.mpu6050Address, config.sdaPin, config.sclPin);
@@ -154,12 +170,14 @@ void ImuSensor::update() {
     status.gyroZDegS = gz / 131.0f - gyroBiasZ;
 
     // Complementary filter: gyro is responsive, accelerometer corrects drift.
-    status.pitchDeg =
-        0.98f * (status.pitchDeg + status.gyroYDegS * dt) +
+    filteredPitchDeg =
+        0.98f * (filteredPitchDeg + status.gyroYDegS * dt) +
         0.02f * accelPitch;
-    status.rollDeg =
-        0.98f * (status.rollDeg + status.gyroXDegS * dt) +
+    filteredRollDeg =
+        0.98f * (filteredRollDeg + status.gyroXDegS * dt) +
         0.02f * accelRoll;
+    status.pitchDeg = filteredPitchDeg - pitchOffsetDeg;
+    status.rollDeg = filteredRollDeg - rollOffsetDeg;
     status.updatedAtMs = millis();
     status.errorMessage[0] = '\0';
 }
@@ -177,6 +195,7 @@ ImuScanResult ImuSensor::scanBus() {
             if (result.count < sizeof(result.addresses)) {
                 result.addresses[result.count++] = address;
             }
+
             Serial.printf("[IMU] I2C знайдено адресу 0x%02X\n", address);
         }
     }
@@ -184,6 +203,54 @@ ImuScanResult ImuSensor::scanBus() {
         Serial.println("[IMU] I2C пристроїв не знайдено");
     }
     return result;
+}
+
+bool ImuSensor::calibrateGyro(uint16_t sampleCount) {
+    if (!status.initialized || sampleCount == 0) {
+        return false;
+    }
+
+    Serial.printf("[IMU] Початок калібрування гіроскопа, зразків: %u\n",
+                  sampleCount);
+    int64_t sumX = 0;
+    int64_t sumY = 0;
+    int64_t sumZ = 0;
+    for (uint16_t i = 0; i < sampleCount; ++i) {
+        int16_t ax, ay, az, gx, gy, gz;
+        if (!readMpuSample(ax, ay, az, gx, gy, gz)) {
+            setError("Помилка читання MPU6050 під час калібрування");
+            return false;
+        }
+        sumX += gx;
+        sumY += gy;
+        sumZ += gz;
+        delay(2);
+    }
+
+    gyroBiasX = static_cast<float>(sumX) / sampleCount / 131.0f;
+    gyroBiasY = static_cast<float>(sumY) / sampleCount / 131.0f;
+    gyroBiasZ = static_cast<float>(sumZ) / sampleCount / 131.0f;
+    saveConfig();
+    status.gyroXDegS = 0.0f;
+    status.gyroYDegS = 0.0f;
+    status.gyroZDegS = 0.0f;
+    status.errorMessage[0] = '\0';
+    Serial.printf("[IMU] Bias: X=%.3f, Y=%.3f, Z=%.3f град/с\n",
+                  gyroBiasX, gyroBiasY, gyroBiasZ);
+    return true;
+}
+
+bool ImuSensor::zeroOrientation() {
+    if (!status.initialized) {
+        return false;
+    }
+    pitchOffsetDeg = filteredPitchDeg;
+    rollOffsetDeg = filteredRollDeg;
+    status.pitchDeg = 0.0f;
+    status.rollDeg = 0.0f;
+    saveConfig();
+    Serial.println("[IMU] Поточне положення збережено як нульове");
+    return true;
 }
 
 bool ImuSensor::applyConfig(const ImuConfig& newConfig, bool& rebootRequired) {

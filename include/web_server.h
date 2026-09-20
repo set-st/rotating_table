@@ -26,6 +26,10 @@ private:
     void handleGetSettings();
     void handleSaveSettings();
     void handleImuScan();
+    void handleImuCalibrate();
+    void handleImuZero();
+    void handleAutomaticStart();
+    void handleAutomaticStop();
 
     // Налаштування Wi-Fi
     void handleWiFiConfig();

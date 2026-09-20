@@ -13,7 +13,8 @@ MotionController::MotionController()
       requestedSpeedDegS(DEFAULT_SPEED_DEG_S), endstopTriggerStartTime(0),
       previousButtonLeft(false), previousButtonRight(false),
       previousButtonStop(false), homingStep(HOME_FAST_APPROACH),
-      homingStartTime(0) {
+      homingStartTime(0), automaticEnabled(false), automaticAngle(0.0f),
+      automaticSpeed(0.0f), automaticIntervalMs(0), nextAutomaticAt(0) {
   memset(lastError, 0, sizeof(lastError));
 
   // Початкові налаштування за замовчуванням
@@ -293,6 +294,7 @@ void MotionController::handleHardwareButtons() {
 
   if (stopPressed || (stop && (state == STATE_MOVING ||
                                state == STATE_HOMING))) {
+    stopAutomatic();
     emergencyStop();
   } else if (state != STATE_HOMING && state != STATE_MOVING &&
              (leftPressed || rightPressed)) {
@@ -403,6 +405,36 @@ void MotionController::emergencyStop() {
   }
 }
 
+bool MotionController::startAutomatic(float angleDeg, float speedDegS,
+                                      uint32_t intervalMs) {
+  if (angleDeg == 0.0f || speedDegS <= 0.0f || intervalMs < 100) {
+    return false;
+  }
+  if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+    return false;
+  }
+  if (state == STATE_HOMING) {
+    xSemaphoreGive(mutex);
+    return false;
+  }
+  automaticAngle = angleDeg;
+  automaticSpeed = speedDegS;
+  automaticIntervalMs = intervalMs;
+  automaticEnabled = true;
+  nextAutomaticAt = millis();
+  xSemaphoreGive(mutex);
+  return true;
+}
+
+void MotionController::stopAutomatic() {
+  if (mutex != nullptr && xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    automaticEnabled = false;
+    xSemaphoreGive(mutex);
+  } else {
+    automaticEnabled = false;
+  }
+}
+
 void MotionController::setZero() {
   if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     stepper.setCurrentPosition(0);
@@ -425,6 +457,10 @@ MotionStatus MotionController::getStatus() {
   s.currentSpeed = requestedSpeedDegS;
   s.isHomed = isHomed;
   s.endstopTriggered = isEndstopPressed();
+  s.automaticEnabled = automaticEnabled;
+  s.automaticAngle = automaticAngle;
+  s.automaticSpeed = automaticSpeed;
+  s.automaticIntervalMs = automaticIntervalMs;
   strncpy(s.errorMessage, lastError, sizeof(s.errorMessage) - 1);
 
   switch (s.state) {
@@ -461,6 +497,12 @@ void MotionController::motionLoop() {
 
   while (true) {
     handleHardwareButtons();
+    if (automaticEnabled && state == STATE_IDLE &&
+        static_cast<int32_t>(millis() - nextAutomaticAt) >= 0) {
+      if (moveTo(automaticAngle, automaticSpeed, true)) {
+        nextAutomaticAt = millis() + automaticIntervalMs;
+      }
+    }
     if (state == STATE_MOVING) {
       stepper.run();
       if (stepper.distanceToGo() == 0) {

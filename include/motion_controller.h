@@ -21,6 +21,10 @@ struct MotionStatus {
     float currentSpeed;
     bool isHomed;
     bool endstopTriggered;
+    bool automaticEnabled;
+    float automaticAngle;
+    float automaticSpeed;
+    uint32_t automaticIntervalMs;
     char errorMessage[64];
 };
 
@@ -96,6 +100,8 @@ public:
 
     // Встановлення поточної позиції як 0.0° без руху
     void setZero();
+    bool startAutomatic(float angleDeg, float speedDegS, uint32_t intervalMs);
+    void stopAutomatic();
 
     // Увімкнення / вимкнення виходів драйвера двигуна (Enable)
     void setDriverEnabled(bool enable);
@@ -140,6 +146,11 @@ private:
     };
     HomingStep homingStep;
     uint32_t homingStartTime;
+    bool automaticEnabled;
+    float automaticAngle;
+    float automaticSpeed;
+    uint32_t automaticIntervalMs;
+    uint32_t nextAutomaticAt;
 
     // Функція фонового завдання FreeRTOS
     static void motionTaskEntry(void* parameter);

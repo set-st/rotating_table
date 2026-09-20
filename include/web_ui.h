@@ -389,6 +389,18 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <div>Датчики: <span id="txtImuSensors">MPU6050 — очікування</span></div>
         <div id="txtImuError" style="color: var(--danger);"></div>
       </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin: 12px 0;">
+        Для калібрування гіроскопа покладіть IMU нерухомо. Для нульової точки
+        спочатку виставте стіл по бульбашковому рівню.
+      </p>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="btnCalibrateGyro" onclick="calibrateGyro()">
+          Калібрувати гіроскоп
+        </button>
+        <button type="button" class="btn-secondary" id="btnZeroImu" onclick="zeroImu()">
+          Зберегти поточне положення як 0°
+        </button>
+      </div>
     </div>
 
     <!-- КАРТКА КАЛІБРУВАННЯ ТА ОБНУЛЕННЯ -->
@@ -432,6 +444,35 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <button class="btn-secondary" onclick="setAnglePreset(90)">+90°</button>
           <button class="btn-secondary" onclick="setAnglePreset(180)">+180°</button>
           <button class="btn-secondary" onclick="setAnglePreset(360)">+360°</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Автоматичне обертання</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+          Повторює відносний поворот на заданий кут через вказаний інтервал.
+          Кут може бути від'ємним для обертання вліво.
+        </p>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="inputAutoAngle">Кут одного кроку (°):</label>
+            <input type="number" id="inputAutoAngle" value="10" step="0.1">
+          </div>
+          <div class="form-group">
+            <label for="inputAutoSpeed">Швидкість (°/с):</label>
+            <input type="number" id="inputAutoSpeed" value="3" min="1" step="0.1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="inputAutoInterval">Інтервал між поворотами (с):</label>
+          <input type="number" id="inputAutoInterval" value="5" min="0.1" step="0.1">
+        </div>
+        <div class="btn-row">
+          <button id="btnAutoStart" class="btn-success" onclick="startAutomaticRotation()">Запустити автоматично</button>
+          <button id="btnAutoStop" class="btn-danger" onclick="stopAutomaticRotation()">Зупинити автоматичний режим</button>
+        </div>
+        <div id="txtAutoStatus" class="info-box" style="margin-top: 10px; margin-bottom: 0;">
+          Автоматичний режим вимкнено.
         </div>
       </div>
 
@@ -879,12 +920,67 @@ POST /api/wifi/reset</pre>
         output.textContent = 'Помилка сканування I2C.';
         return;
       }
+
       if (!res.addresses || res.addresses.length === 0) {
         output.textContent = 'Пристроїв I2C не знайдено.';
         return;
       }
       output.textContent = 'Знайдені адреси: ' +
         res.addresses.map(address => '0x' + address.toString(16).toUpperCase().padStart(2, '0')).join(', ');
+    }
+
+    async function calibrateGyro() {
+      const btn = document.getElementById('btnCalibrateGyro');
+      btn.disabled = true;
+      toast('Калібрування гіроскопа: не рухайте IMU приблизно 1 секунду...');
+      const res = await apiCall('/api/imu/calibrate', {});
+      btn.disabled = false;
+      if (res && res.status === 'ok') {
+        toast('Гіроскоп успішно відкалібровано.');
+      } else {
+        toast('Помилка калібрування: ' + (res ? res.error : 'немає відповіді'));
+      }
+    }
+
+    async function zeroImu() {
+      const btn = document.getElementById('btnZeroImu');
+      btn.disabled = true;
+      const res = await apiCall('/api/imu/zero', {});
+      btn.disabled = false;
+      if (res && res.status === 'ok') {
+        toast('Поточне положення збережено як нульове.');
+      } else {
+        toast('Помилка обнулення: ' + (res ? res.error : 'немає відповіді'));
+      }
+
+    }
+
+    async function startAutomaticRotation() {
+      const angle = parseFloat(document.getElementById('inputAutoAngle').value);
+      const speed = parseFloat(document.getElementById('inputAutoSpeed').value);
+      const interval = parseFloat(document.getElementById('inputAutoInterval').value);
+      if (!Number.isFinite(angle) || !Number.isFinite(speed) || !Number.isFinite(interval) ||
+          angle === 0 || speed <= 0 || interval < 0.1) {
+        toast('Перевірте параметри автоматичного обертання.');
+        return;
+      }
+      const res = await apiCall('/api/automatic/start', {
+        angle: angle,
+        speed: speed,
+        interval_ms: Math.round(interval * 1000)
+      });
+      if (res && res.status === 'ok') {
+        toast('Автоматичний режим запущено.');
+      } else {
+        toast('Помилка запуску: ' + (res ? res.error : 'немає відповіді'));
+      }
+    }
+
+    async function stopAutomaticRotation() {
+      const res = await apiCall('/api/automatic/stop', {});
+      if (res && res.status === 'ok') {
+        toast('Автоматичний режим зупинено.');
+      }
     }
 
     // --- НАЛАШТУВАННЯ АПАРАТУРИ ---
@@ -1098,7 +1194,7 @@ POST /api/wifi/reset</pre>
       }
     }
 
-    // --- ЖИВЕ ОНОВЛЕННЯ СТАНУ (150 мс) ---
+    // --- ЖИВЕ ОНОВЛЕННЯ СТАНУ (300 мс) ---
     async function updateStatus() {
       if (isStatusUpdating) return;
       isStatusUpdating = true;
@@ -1139,6 +1235,9 @@ POST /api/wifi/reset</pre>
         }
 
         document.getElementById('txtError').textContent = st.error || '';
+        document.getElementById('txtAutoStatus').textContent = st.automatic_enabled
+          ? `Автоматичний режим: ${st.automatic_angle.toFixed(1)}° кожні ${(st.automatic_interval_ms / 1000).toFixed(1)} с`
+          : 'Автоматичний режим вимкнено.';
         const imuOnline = !!st.imu_initialized && !!st.imu_mpu6050_connected;
         document.getElementById('badgeImu').textContent = imuOnline ? 'ONLINE' : 'OFFLINE';
         document.getElementById('badgeImu').className = 'badge ' + (imuOnline ? 'badge-idle' : 'badge-error');
@@ -1159,8 +1258,8 @@ POST /api/wifi/reset</pre>
       }
     }
 
-    // Запуск таймера опитування (150 мс для плавної анімації цифр)
-    setInterval(updateStatus, 150);
+    // Запуск таймера опитування (300 мс — менше навантаження на ESP32)
+    setInterval(updateStatus, 300);
     updateStatus();
     loadHardwareSettings();
     loadWiFiConfig();
