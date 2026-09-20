@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "config.h"
 #include "imu_sensor.h"
+#include "ota_updater.h"
 #include <ArduinoJson.h>
 
 TableWebServer webServer;
@@ -47,6 +48,8 @@ void TableWebServer::setupRoutes() {
     server.on("/api/imu/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/automatic/start", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/automatic/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/ota/latest", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/ota/update", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/config", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/save", HTTP_OPTIONS, [this]() { handleOptions(); });
@@ -67,6 +70,8 @@ void TableWebServer::setupRoutes() {
     server.on("/api/imu/zero", HTTP_POST, [this]() { handleImuZero(); });
     server.on("/api/automatic/start", HTTP_POST, [this]() { handleAutomaticStart(); });
     server.on("/api/automatic/stop", HTTP_POST, [this]() { handleAutomaticStop(); });
+    server.on("/api/ota/latest", HTTP_GET, [this]() { handleOtaLatest(); });
+    server.on("/api/ota/update", HTTP_POST, [this]() { handleOtaUpdate(); });
 
     // Налаштування Wi-Fi
     server.on("/api/wifi/config", HTTP_GET, [this]() { handleWiFiConfig(); });
@@ -200,6 +205,39 @@ void TableWebServer::handleAutomaticStop() {
     String response;
     serializeJson(doc, response);
     server.send(200, "application/json", response);
+}
+
+void TableWebServer::handleOtaLatest() {
+    sendCorsHeaders();
+    OtaReleaseInfo info = otaUpdater.getLatestRelease();
+    JsonDocument doc;
+    doc["status"] = info.available ? "ok" : "error";
+    if (info.available) {
+        doc["tag"] = info.tagName;
+        doc["asset"] = info.assetName;
+        doc["size"] = info.assetSize;
+    } else {
+        doc["error"] = info.error;
+    }
+    String response;
+    serializeJson(doc, response);
+    server.send(info.available ? 200 : 502, "application/json", response);
+}
+
+void TableWebServer::handleOtaUpdate() {
+    sendCorsHeaders();
+    String error;
+    const bool success = otaUpdater.installLatestRelease(error);
+    JsonDocument doc;
+    doc["status"] = success ? "ok" : "error";
+    doc["message"] = success ? "Оновлення записано. Контролер перезавантажується..."
+                             : error;
+    String response;
+    serializeJson(doc, response);
+    server.send(success ? 200 : 502, "application/json", response);
+    if (success) {
+        wifiMgr.scheduleRestart(1500);
+    }
 }
 
 void TableWebServer::handleHome() {

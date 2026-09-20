@@ -481,7 +481,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <label for="rangeSpeed">Швидкість обертання:</label>
           <span id="txtSpeedLabel" style="font-size: 0.9rem; font-weight:600; color:var(--primary)">3 °/с</span>
         </div>
-        <input type="range" id="rangeSpeed" min="1" max="30" value="3" oninput="onSpeedChange(this.value)">
+        <input type="range" id="rangeSpeed" min="1" max="180" value="3" oninput="onSpeedChange(this.value)">
       </div>
 
       <div class="btn-row" style="margin-top: 20px;">
@@ -588,7 +588,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           </div>
           <div class="form-group">
             <label for="inputMaxSpeed">Макс. швидкість (°/с):</label>
-            <input type="number" id="inputMaxSpeed" value="180" min="5" max="360">
+            <input type="number" id="inputMaxSpeed" value="180" min="1" max="360" oninput="updateSpeedSliderLimit(this.value)">
           </div>
         </div>
         <div class="form-group">
@@ -777,6 +777,27 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       </div>
     </details>
 
+    <details class="card" id="detailsOta">
+      <summary class="card-title">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span>⬆️</span>
+          <span>Оновлення прошивки з GitHub</span>
+        </span>
+        <span class="summary-arrow">▼</span>
+      </summary>
+      <div style="margin-top: 10px;">
+        <p style="font-size: 0.8rem; color: var(--text-muted);">
+          Буде використано BIN-файл з останнього релізу репозиторію
+          set-st/rotating_table. Не вимикайте живлення під час оновлення.
+        </p>
+        <div id="txtOtaRelease" class="info-box">Реліз ще не перевірявся.</div>
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" onclick="checkOtaRelease()">Перевірити реліз</button>
+          <button type="button" id="btnOtaUpdate" class="btn-success" onclick="updateFromGithub()">Оновити прошивку</button>
+        </div>
+      </div>
+    </details>
+
     <!-- ДОВІДКА ПО API (ЗГОРТАНА) -->
     <details class="card" id="detailsApi">
       <summary class="card-title">
@@ -817,6 +838,10 @@ POST /api/settings
 GET  /api/wifi/scan
 POST /api/wifi/save
 POST /api/wifi/reset</pre>
+
+        <p style="margin-top:8px;"><strong>Оновлення прошивки:</strong></p>
+        <pre>GET  /api/ota/latest
+POST /api/ota/update</pre>
       </div>
     </details>
   </div>
@@ -848,6 +873,16 @@ POST /api/wifi/reset</pre>
 
     function onSpeedChange(val) {
       document.getElementById('txtSpeedLabel').textContent = val + ' °/с';
+    }
+
+    function updateSpeedSliderLimit(maxSpeed) {
+      const slider = document.getElementById('rangeSpeed');
+      const limit = Math.max(1, Number(maxSpeed) || 1);
+      slider.max = limit;
+      if (Number(slider.value) > limit) {
+        slider.value = limit;
+      }
+      onSpeedChange(slider.value);
     }
 
     function togglePassVisibility(id) {
@@ -996,6 +1031,7 @@ POST /api/wifi/reset</pre>
       document.getElementById('chkInvertDir').checked = !!res.invert_dir;
       document.getElementById('inputDefSpeed').value = res.default_speed ?? 30;
       document.getElementById('inputMaxSpeed').value = res.max_speed ?? 180;
+      updateSpeedSliderLimit(document.getElementById('inputMaxSpeed').value);
       document.getElementById('inputAccel').value = res.acceleration ?? 90;
 
       document.getElementById('chkEndstopInvert').checked = !!res.endstop_inverted;
@@ -1191,6 +1227,33 @@ POST /api/wifi/reset</pre>
         startRebootCountdown('Налаштування мережі скинуто.');
       } else {
         toast('Помилка скидання.');
+      }
+    }
+
+    async function checkOtaRelease() {
+      const output = document.getElementById('txtOtaRelease');
+      output.textContent = 'Перевірка останнього релізу GitHub...';
+      const res = await apiCall('/api/ota/latest');
+      if (!res || res.status !== 'ok') {
+        output.textContent = 'Помилка: ' + (res ? res.error : 'немає відповіді');
+        return;
+      }
+      output.textContent = `Реліз ${res.tag}, файл ${res.asset} (${Math.round(res.size / 1024)} КБ)`;
+    }
+
+    async function updateFromGithub() {
+      if (!confirm('Запустити оновлення прошивки з останнього релізу GitHub?')) return;
+      const btn = document.getElementById('btnOtaUpdate');
+      btn.disabled = true;
+      document.getElementById('txtOtaRelease').textContent =
+        'Завантаження та запис прошивки. Не вимикайте живлення...';
+      const res = await apiCall('/api/ota/update', {});
+      if (res && res.status === 'ok') {
+        startRebootCountdown('Прошивку оновлено. Контролер перезавантажується...');
+      } else {
+        btn.disabled = false;
+        document.getElementById('txtOtaRelease').textContent =
+          'Помилка оновлення: ' + (res ? res.message : 'немає відповіді');
       }
     }
 

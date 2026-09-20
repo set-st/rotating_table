@@ -30,6 +30,8 @@ private:
     void handleImuZero();
     void handleAutomaticStart();
     void handleAutomaticStop();
+    void handleOtaLatest();
+    void handleOtaUpdate();
 
     // Налаштування Wi-Fi
     void handleWiFiConfig();

@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "web_server.h"
 #include "imu_sensor.h"
+#include "ota_updater.h"
 
 void setup() {
     Serial.begin(115200);
