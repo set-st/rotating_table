@@ -22,8 +22,26 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.release_tag || github.ref }}
+
+      - name: Select release tag
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          case "$RELEASE_TAG" in
+            v[0-9]*)
+              ;;
+            *)
+              echo "::error::release_tag must start with v and contain a version, for example v1.0.1"
+              exit 1
+              ;;
+          esac
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Git tag '$RELEASE_TAG' does not exist on origin. Create and push it first."
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git checkout --detach "refs/tags/$RELEASE_TAG"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -46,8 +64,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
-          RELEASE_TAG="${{ inputs.release_tag || github.ref_name }}"
+          RELEASE_TAG="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
           gh release create "$RELEASE_TAG" \
             .pio/build/esp32dev/firmware.bin \
             --generate-notes \
