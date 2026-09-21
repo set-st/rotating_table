@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "config.h"
 #include "imu_sensor.h"
+#include "tilt_controller.h"
 #include "ota_updater.h"
 #include <ArduinoJson.h>
 
@@ -48,6 +49,12 @@ void TableWebServer::setupRoutes() {
     server.on("/api/imu/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/automatic/start", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/automatic/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/status", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/settings", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/move", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/level", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/home", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/ota/latest", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/ota/update", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/config", HTTP_OPTIONS, [this]() { handleOptions(); });
@@ -70,6 +77,13 @@ void TableWebServer::setupRoutes() {
     server.on("/api/imu/zero", HTTP_POST, [this]() { handleImuZero(); });
     server.on("/api/automatic/start", HTTP_POST, [this]() { handleAutomaticStart(); });
     server.on("/api/automatic/stop", HTTP_POST, [this]() { handleAutomaticStop(); });
+    server.on("/api/tilt/status", HTTP_GET, [this]() { handleTiltStatus(); });
+    server.on("/api/tilt/settings", HTTP_GET, [this]() { handleTiltSettings(); });
+    server.on("/api/tilt/settings", HTTP_POST, [this]() { handleTiltSettings(); });
+    server.on("/api/tilt/move", HTTP_POST, [this]() { handleTiltMove(); });
+    server.on("/api/tilt/level", HTTP_POST, [this]() { handleTiltLevel(); });
+    server.on("/api/tilt/stop", HTTP_POST, [this]() { handleTiltStop(); });
+    server.on("/api/tilt/home", HTTP_POST, [this]() { handleTiltHome(); });
     server.on("/api/ota/latest", HTTP_GET, [this]() { handleOtaLatest(); });
     server.on("/api/ota/update", HTTP_POST, [this]() { handleOtaUpdate(); });
 
@@ -114,6 +128,15 @@ void TableWebServer::handleStatus() {
     doc["imu_gyro_y_dps"] = imu.gyroYDegS;
     doc["imu_gyro_z_dps"] = imu.gyroZDegS;
     doc["imu_updated_ms"] = imu.updatedAtMs;
+    TiltStatus tilt = tiltController.getStatus();
+    doc["tilt_enabled"] = tilt.enabled;
+    doc["tilt_moving"] = tilt.moving;
+    doc["tilt_height_mm"] = tilt.heightMm;
+    doc["tilt_pitch_deg"] = tilt.pitchDeg;
+    doc["tilt_roll_deg"] = tilt.rollDeg;
+    doc["tilt_target_height_mm"] = tilt.targetHeightMm;
+    doc["tilt_target_pitch_deg"] = tilt.targetPitchDeg;
+    doc["tilt_target_roll_deg"] = tilt.targetRollDeg;
     if (strlen(imu.errorMessage) > 0) {
         doc["imu_error"] = imu.errorMessage;
     }
@@ -252,6 +275,7 @@ void TableWebServer::handleOtaUpdate() {
 void TableWebServer::handleHome() {
     sendCorsHeaders();
 
+    tiltController.emergencyStop();
     if (motionCtrl.startHoming()) {
         JsonDocument doc;
         doc["status"] = "ok";
@@ -332,6 +356,7 @@ void TableWebServer::handleStop() {
     sendCorsHeaders();
     motionCtrl.stopAutomatic();
     motionCtrl.emergencyStop();
+    tiltController.emergencyStop();
 
     JsonDocument doc;
     doc["status"] = "ok";
@@ -339,6 +364,149 @@ void TableWebServer::handleStop() {
     String res;
     serializeJson(doc, res);
     server.send(200, "application/json", res);
+}
+
+static void sendTiltStatus(WebServer& server, const TiltStatus& st) {
+    JsonDocument doc;
+    doc["status"] = "ok";
+    doc["enabled"] = st.enabled;
+    doc["moving"] = st.moving;
+    doc["stopped"] = st.stopped;
+    doc["height_mm"] = st.heightMm;
+    doc["pitch_deg"] = st.pitchDeg;
+    doc["roll_deg"] = st.rollDeg;
+    doc["target_height_mm"] = st.targetHeightMm;
+    doc["target_pitch_deg"] = st.targetPitchDeg;
+    doc["target_roll_deg"] = st.targetRollDeg;
+    JsonArray pulses = doc["pulse_us"].to<JsonArray>();
+    for (uint8_t i = 0; i < 4; ++i) pulses.add(st.pulseUs[i]);
+    if (strlen(st.errorMessage) > 0) doc["error"] = st.errorMessage;
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+}
+
+void TableWebServer::handleTiltStatus() {
+    sendCorsHeaders();
+    sendTiltStatus(server, tiltController.getStatus());
+}
+
+void TableWebServer::handleTiltSettings() {
+    sendCorsHeaders();
+    TiltConfig cfg = tiltController.getConfig();
+    if (server.method() == HTTP_POST) {
+        if (!server.hasArg("plain")) {
+            server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Відсутнє тіло запиту\"}");
+            return;
+        }
+        JsonDocument req;
+        if (deserializeJson(req, server.arg("plain"))) {
+            server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некоректний формат JSON\"}");
+            return;
+        }
+        cfg.enabled = req["enabled"] | cfg.enabled;
+        cfg.minHeightMm = req["min_height_mm"] | cfg.minHeightMm;
+        cfg.maxHeightMm = req["max_height_mm"] | cfg.maxHeightMm;
+        cfg.maxPitchDeg = req["max_pitch_deg"] | cfg.maxPitchDeg;
+        cfg.maxRollDeg = req["max_roll_deg"] | cfg.maxRollDeg;
+        cfg.maxTiltSpeed = req["max_tilt_speed"] | cfg.maxTiltSpeed;
+        cfg.pulsePerMm = req["pulse_per_mm"] | cfg.pulsePerMm;
+        for (uint8_t i = 0; i < 4; ++i) {
+            char key[24];
+            snprintf(key, sizeof(key), "actuator_%u_pin", i);
+            if (req[key].is<int>()) cfg.actuatorPin[i] = req[key].as<int>();
+            snprintf(key, sizeof(key), "actuator_%u_channel", i);
+            if (req[key].is<int>()) cfg.pwmChannel[i] = req[key].as<uint8_t>();
+            snprintf(key, sizeof(key), "actuator_%u_min_us", i);
+            if (req[key].is<int>()) cfg.minPulseUs[i] = req[key].as<uint16_t>();
+            snprintf(key, sizeof(key), "actuator_%u_max_us", i);
+            if (req[key].is<int>()) cfg.maxPulseUs[i] = req[key].as<uint16_t>();
+            snprintf(key, sizeof(key), "actuator_%u_neutral_us", i);
+            if (req[key].is<int>()) cfg.neutralPulseUs[i] = req[key].as<uint16_t>();
+            snprintf(key, sizeof(key), "actuator_%u_offset_mm", i);
+            if (req[key].is<float>()) cfg.actuatorOffsetMm[i] = req[key].as<float>();
+            snprintf(key, sizeof(key), "actuator_%u_inverted", i);
+            if (req[key].is<bool>()) cfg.actuatorInverted[i] = req[key].as<bool>();
+        }
+        bool rebootRequired = false;
+        if (!tiltController.applyConfig(cfg, rebootRequired)) {
+            server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некоректні налаштування серво\"}");
+            return;
+        }
+        JsonDocument responseDoc;
+        responseDoc["status"] = "ok";
+        responseDoc["reboot_required"] = rebootRequired;
+        if (rebootRequired) wifiMgr.scheduleRestart(1500);
+        String response;
+        serializeJson(responseDoc, response);
+        server.send(200, "application/json", response);
+        return;
+    }
+    JsonDocument doc;
+    doc["status"] = "ok";
+    doc["enabled"] = cfg.enabled;
+    doc["min_height_mm"] = cfg.minHeightMm;
+    doc["max_height_mm"] = cfg.maxHeightMm;
+    doc["max_pitch_deg"] = cfg.maxPitchDeg;
+    doc["max_roll_deg"] = cfg.maxRollDeg;
+    doc["max_tilt_speed"] = cfg.maxTiltSpeed;
+    doc["pulse_per_mm"] = cfg.pulsePerMm;
+    for (uint8_t i = 0; i < 4; ++i) {
+        char key[24];
+        snprintf(key, sizeof(key), "actuator_%u_pin", i); doc[key] = cfg.actuatorPin[i];
+        snprintf(key, sizeof(key), "actuator_%u_channel", i); doc[key] = cfg.pwmChannel[i];
+        snprintf(key, sizeof(key), "actuator_%u_min_us", i); doc[key] = cfg.minPulseUs[i];
+        snprintf(key, sizeof(key), "actuator_%u_max_us", i); doc[key] = cfg.maxPulseUs[i];
+        snprintf(key, sizeof(key), "actuator_%u_neutral_us", i); doc[key] = cfg.neutralPulseUs[i];
+        snprintf(key, sizeof(key), "actuator_%u_offset_mm", i); doc[key] = cfg.actuatorOffsetMm[i];
+        snprintf(key, sizeof(key), "actuator_%u_inverted", i); doc[key] = cfg.actuatorInverted[i];
+    }
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+}
+
+void TableWebServer::handleTiltMove() {
+    sendCorsHeaders();
+    if (motionCtrl.getStatus().state == STATE_HOMING) {
+        server.send(409, "application/json", "{\"status\":\"error\",\"error\":\"Нахил заборонений під час homing\"}");
+        return;
+    }
+    JsonDocument req;
+    if (!server.hasArg("plain") || deserializeJson(req, server.arg("plain"))) {
+        server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некоректне тіло запиту\"}");
+        return;
+    }
+    const bool ok = tiltController.moveTo(req["height_mm"] | 0.0f,
+                                          req["pitch_deg"] | 0.0f,
+                                          req["roll_deg"] | 0.0f,
+                                          req["speed"] | 0.0f);
+    server.send(ok ? 200 : 409, "application/json",
+                ok ? "{\"status\":\"ok\"}" : "{\"status\":\"error\",\"error\":\"Команда нахилу відхилена\"}");
+}
+
+void TableWebServer::handleTiltLevel() {
+    sendCorsHeaders();
+    const bool ok = tiltController.level();
+    server.send(ok ? 200 : 409, "application/json",
+                ok ? "{\"status\":\"ok\"}" : "{\"status\":\"error\",\"error\":\"Вирівнювання відхилено\"}");
+}
+
+void TableWebServer::handleTiltStop() {
+    sendCorsHeaders();
+    tiltController.emergencyStop();
+    server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void TableWebServer::handleTiltHome() {
+    sendCorsHeaders();
+    if (motionCtrl.getStatus().state == STATE_HOMING) {
+        server.send(409, "application/json", "{\"status\":\"error\",\"error\":\"Нахил заборонений під час homing\"}");
+        return;
+    }
+    const bool ok = tiltController.home();
+    server.send(ok ? 200 : 409, "application/json",
+                ok ? "{\"status\":\"ok\"}" : "{\"status\":\"error\",\"error\":\"Повернення серво в нуль відхилено\"}");
 }
 
 void TableWebServer::handleZero() {

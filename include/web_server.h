@@ -21,6 +21,12 @@ private:
     void handleMove();
     void handleStop();
     void handleZero();
+    void handleTiltStatus();
+    void handleTiltSettings();
+    void handleTiltMove();
+    void handleTiltLevel();
+    void handleTiltStop();
+    void handleTiltHome();
 
     // Налаштування кінцевика та параметрів столу
     void handleGetSettings();

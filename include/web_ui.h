@@ -367,11 +367,14 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">
-        <span>IMU GY-87 (Live)</span>
-        <span id="badgeImu" class="badge badge-error">OFFLINE</span>
-      </div>
+    <details class="card" id="detailsImuTilt">
+      <summary class="card-title">
+        <span>IMU GY-87 и наклон стола (Live)</span>
+        <span style="display:flex; gap:8px;">
+          <span id="badgeImu" class="badge badge-error">IMU OFFLINE</span>
+          <span id="badgeTilt" class="badge badge-error">SERVO OFFLINE</span>
+        </span>
+      </summary>
       <div class="status-grid">
         <div class="status-item">
           <div class="label">Нахил Pitch</div>
@@ -382,6 +385,11 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <div class="label">Нахил Roll</div>
           <div class="value"><span id="valImuRoll">0.00</span>°</div>
           <div class="sub">Ліворуч / праворуч</div>
+        </div>
+        <div class="status-item">
+          <div class="label">Висота платформи</div>
+          <div class="value"><span id="valTiltHeight">0.0</span> мм</div>
+          <div class="sub">Ціль: <span id="valTiltTarget">0.0</span> мм</div>
         </div>
       </div>
       <div class="info-box" style="margin-top: 12px; margin-bottom: 0;">
@@ -401,11 +409,52 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           Зберегти поточне положення як 0°
         </button>
       </div>
-    </div>
+    </details>
+
+    <details class="card" id="detailsTiltControl">
+      <summary class="card-title">
+        <span>Керування нахилом та серво</span>
+        <span class="summary-arrow">▼</span>
+      </summary>
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="form-group"><label for="inputTiltHeight">Висота (мм)</label><input type="number" id="inputTiltHeight" value="0" step="0.5"></div>
+        <div class="form-group"><label for="inputTiltSpeed">Швидкість (мм/с)</label><input type="number" id="inputTiltSpeed" value="10" min="0.1" step="0.5"></div>
+        <div class="form-group"><label for="inputTiltPitch">Pitch (°)</label><input type="number" id="inputTiltPitch" value="0" step="0.1"></div>
+        <div class="form-group"><label for="inputTiltRoll">Roll (°)</label><input type="number" id="inputTiltRoll" value="0" step="0.1"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-success" onclick="moveTilt()">Застосувати нахил</button>
+        <button class="btn-secondary" onclick="levelTilt()">Вирівняти</button>
+        <button class="btn-danger" onclick="stopTilt()">СТОП серво</button>
+      </div>
+      <details style="margin-top:14px;">
+        <summary>Налаштування PWM-серво</summary>
+        <div class="form-group" style="margin-top:12px;"><label><input type="checkbox" id="chkTiltEnabled"> Увімкнути серво-виходи</label></div>
+        <div class="grid-2">
+          <div class="form-group"><label>Мін. висота (мм)</label><input type="number" id="inputTiltMinHeight" value="-25"></div>
+          <div class="form-group"><label>Макс. висота (мм)</label><input type="number" id="inputTiltMaxHeight" value="25"></div>
+          <div class="form-group"><label>Макс. Pitch (°)</label><input type="number" id="inputTiltMaxPitch" value="3"></div>
+          <div class="form-group"><label>Макс. Roll (°)</label><input type="number" id="inputTiltMaxRoll" value="3"></div>
+          <div class="form-group"><label>Імпульс на мм</label><input type="number" id="inputTiltPulseMm" value="10" min="0.1" step="0.1"></div>
+          <div class="form-group"><label>Макс. швидкість (мм/с)</label><input type="number" id="inputTiltMaxSpeed" value="10" min="0.1" step="0.1"></div>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">GPIO -1 вимикає канал. Живлення актуаторів має бути окремим, із спільною землею.</p>
+        <div class="grid-2">
+          <div class="form-group"><label>Передній лівий GPIO</label><input type="number" id="tiltPin0" value="-1"></div>
+          <div class="form-group"><label>Передній правий GPIO</label><input type="number" id="tiltPin1" value="-1"></div>
+          <div class="form-group"><label>Задній правий GPIO</label><input type="number" id="tiltPin2" value="-1"></div>
+          <div class="form-group"><label>Задній лівий GPIO</label><input type="number" id="tiltPin3" value="-1"></div>
+        </div>
+        <button class="btn-success" onclick="saveTiltSettings()">Зберегти PWM-конфігурацію</button>
+      </details>
+    </details>
 
     <!-- КАРТКА КАЛІБРУВАННЯ ТА ОБНУЛЕННЯ -->
-    <div class="card">
-      <div class="card-title">Калібрування та нульова точка</div>
+    <details class="card" id="detailsCalibration">
+      <summary class="card-title">
+        <span>Калібрування та нульова точка</span>
+        <span class="summary-arrow">▼</span>
+      </summary>
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
         Пошук кінцевика до упору для виставлення бази нуля (0.0°).
       </p>
@@ -419,11 +468,14 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <button class="btn-secondary" onclick="setZero()">Скинути кут в 0°</button>
         <button class="btn-danger" onclick="stopMotor()">СТОП</button>
       </div>
-    </div>
+    </details>
 
     <!-- КАРТКА КЕРУВАННЯ ПОВОРОТОМ -->
-    <div class="card">
-      <div class="card-title">Керування поворотом</div>
+    <details class="card" id="detailsRotation">
+      <summary class="card-title">
+        <span>Керування поворотом</span>
+        <span class="summary-arrow">▼</span>
+      </summary>
       
       <div class="toggle-group">
         <div id="btnModeAbs" class="toggle-btn active" onclick="setRelativeMode(false)">Абсолютний кут</div>
@@ -447,8 +499,11 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Автоматичне обертання</div>
+      <details class="card" id="detailsAutomaticRotation">
+        <summary class="card-title">
+          <span>Автоматичне обертання</span>
+          <span class="summary-arrow">▼</span>
+        </summary>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
           Повторює відносний поворот на заданий кут через вказаний інтервал.
           Кут може бути від'ємним для обертання вліво.
@@ -474,7 +529,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <div id="txtAutoStatus" class="info-box" style="margin-top: 10px; margin-bottom: 0;">
           Автоматичний режим вимкнено.
         </div>
-      </div>
+      </details>
 
       <div class="form-group" style="margin-top: 16px;">
         <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
@@ -489,7 +544,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           Повернути стіл
         </button>
       </div>
-    </div>
+    </details>
 
     <!-- СЕКЦІЯ НАЛАШТУВАНЬ СТОЛУ ТА КІНЕМАТИКИ (ЗГОРТАНА) -->
     <details class="card" id="detailsSettings">
@@ -827,6 +882,11 @@ Content-Type: application/json
 
         <p style="margin-top:8px;"><strong>Опитування стану в реальному часі:</strong></p>
         <pre>GET /api/status</pre>
+        <p style="margin-top:8px;"><strong>Нахил та серво:</strong></p>
+        <pre>POST /api/tilt/move
+{"height_mm":0,"pitch_deg":2,"roll_deg":-1,"speed":10}
+POST /api/tilt/level
+POST /api/tilt/stop</pre>
 
         <p style="margin-top:8px;"><strong>Налаштування конфігурації столу:</strong></p>
         <pre>GET  /api/settings
@@ -918,6 +978,45 @@ POST /api/ota/update</pre>
     async function setZero() {
       const res = await apiCall('/api/zero', {});
       if (res && res.status === 'ok') toast('Встановлено 0°');
+    }
+
+    async function moveTilt() {
+      const res = await apiCall('/api/tilt/move', {
+        height_mm: parseFloat(document.getElementById('inputTiltHeight').value) || 0,
+        pitch_deg: parseFloat(document.getElementById('inputTiltPitch').value) || 0,
+        roll_deg: parseFloat(document.getElementById('inputTiltRoll').value) || 0,
+        speed: parseFloat(document.getElementById('inputTiltSpeed').value) || 0
+      });
+      if (res && res.status !== 'ok') toast('Помилка нахилу: ' + (res.error || 'команда відхилена'));
+    }
+    async function levelTilt() { await apiCall('/api/tilt/level', {}); }
+    async function stopTilt() { await apiCall('/api/tilt/stop', {}); }
+    async function loadTiltSettings() {
+      const cfg = await apiCall('/api/tilt/settings');
+      if (!cfg || cfg.status !== 'ok') return;
+      document.getElementById('chkTiltEnabled').checked = !!cfg.enabled;
+      document.getElementById('inputTiltMinHeight').value = cfg.min_height_mm;
+      document.getElementById('inputTiltMaxHeight').value = cfg.max_height_mm;
+      document.getElementById('inputTiltMaxPitch').value = cfg.max_pitch_deg;
+      document.getElementById('inputTiltMaxRoll').value = cfg.max_roll_deg;
+      document.getElementById('inputTiltPulseMm').value = cfg.pulse_per_mm;
+      document.getElementById('inputTiltMaxSpeed').value = cfg.max_tilt_speed;
+      for (let i = 0; i < 4; i++) document.getElementById('tiltPin' + i).value = cfg['actuator_' + i + '_pin'];
+    }
+    async function saveTiltSettings() {
+      const payload = {
+        enabled: document.getElementById('chkTiltEnabled').checked,
+        min_height_mm: parseFloat(document.getElementById('inputTiltMinHeight').value),
+        max_height_mm: parseFloat(document.getElementById('inputTiltMaxHeight').value),
+        max_pitch_deg: parseFloat(document.getElementById('inputTiltMaxPitch').value),
+        max_roll_deg: parseFloat(document.getElementById('inputTiltMaxRoll').value),
+        pulse_per_mm: parseFloat(document.getElementById('inputTiltPulseMm').value),
+        max_tilt_speed: parseFloat(document.getElementById('inputTiltMaxSpeed').value)
+      };
+      for (let i = 0; i < 4; i++) payload['actuator_' + i + '_pin'] = parseInt(document.getElementById('tiltPin' + i).value);
+      const res = await apiCall('/api/tilt/settings', payload);
+      if (res && res.status === 'ok') toast(res.reboot_required ? 'PWM-піни змінено, контролер перезавантажується.' : 'PWM-конфігурацію збережено');
+      else toast('Помилка: ' + (res ? res.error : 'немає відповіді'));
     }
 
     async function sendMove() {
@@ -1312,6 +1411,11 @@ POST /api/ota/update</pre>
           `MPU6050: ${st.imu_mpu6050_connected ? 'OK' : '—'}; ` +
           `BMP180: ${st.imu_barometer_connected ? 'OK' : '—'}`;
         document.getElementById('txtImuError').textContent = st.imu_error || '';
+        const tiltOnline = !!st.tilt_enabled;
+        document.getElementById('badgeTilt').textContent = tiltOnline ? (st.tilt_moving ? 'MOVING' : 'READY') : 'OFFLINE';
+        document.getElementById('badgeTilt').className = 'badge ' + (tiltOnline ? 'badge-idle' : 'badge-error');
+        document.getElementById('valTiltHeight').textContent = (st.tilt_height_mm || 0).toFixed(1);
+        document.getElementById('valTiltTarget').textContent = (st.tilt_target_height_mm || 0).toFixed(1);
 
         const isBusy = (st.state === 'HOMING');
         document.getElementById('btnHome').disabled = isBusy;
@@ -1325,6 +1429,7 @@ POST /api/ota/update</pre>
     setInterval(updateStatus, 300);
     updateStatus();
     loadHardwareSettings();
+    loadTiltSettings();
     loadWiFiConfig();
   </script>
 </body>
