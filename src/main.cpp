@@ -5,7 +5,6 @@
 #include "web_server.h"
 #include "imu_sensor.h"
 #include "ota_updater.h"
-#include "tilt_controller.h"
 
 void setup() {
     Serial.begin(115200);
@@ -23,10 +22,6 @@ void setup() {
     if (!imuSensor.begin()) {
         Serial.println("[Error] Помилка ініціалізації GY-87/MPU6050!");
     }
-    if (!tiltController.begin()) {
-        Serial.println("[Error] Помилка ініціалізації контролера нахилу!");
-    }
-
     // 2. Налаштування мережі Wi-Fi (зчитування NVS або fallback на config.h, mDNS)
     wifiMgr.begin();
     wifiMgr.setupWiFi();
@@ -47,7 +42,6 @@ void loop() {
     // Обробка вхідних HTTP-запитів
     webServer.handleClient();
     imuSensor.update();
-    tiltController.update();
 
     // Обробка запланованого відкладеного перезавантаження після зміни налаштувань
     wifiMgr.handle();

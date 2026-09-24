@@ -1,342 +1,325 @@
 {
-  "info": {
-    "_postman_id": "rotating-table-api-v1",
-    "name": "Rotating Table ESP32 API",
-    "description": "Колекція REST API для прошивки поворотного столу ESP32. Перед запуском встановіть змінну baseUrl на адресу контролера, наприклад http://192.168.4.1 або http://rotating-table.local.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://192.168.4.1",
-      "type": "string",
-      "description": "IP-адреса або mDNS-ім'я ESP32 без кінцевої косої риски"
-    }
-  ],
-  "item": [
-    {
-      "name": "Основне керування",
-      "item": [
-        {
-          "name": "Отримати загальний стан",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Повертає стан двигуна обертання, IMU, автоматичного режиму та нахилу.",
-            "url": "{{baseUrl}}/api/status"
-          }
-        },
-        {
-          "name": "Запустити homing",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Запускає пошук кінцевого вимикача та встановлює нульову позицію.",
-            "url": "{{baseUrl}}/api/home"
-          }
-        },
-        {
-          "name": "Повернути стіл",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"angle\": 90.0,\n  \"speed\": 3.0,\n  \"relative\": false\n}"
-            },
-            "description": "angle — абсолютний кут або відносне зміщення; speed — град/с; relative — відносний режим.",
-            "url": "{{baseUrl}}/api/move"
-          }
-        },
-        {
-          "name": "Зупинити все",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Аварійно зупиняє кроковий двигун і сервоприводи.",
-            "url": "{{baseUrl}}/api/stop"
-          }
-        },
-        {
-          "name": "Встановити поточний кут у нуль",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Без руху встановлює поточну позицію поворотного столу в 0 градусів.",
-            "url": "{{baseUrl}}/api/zero"
-          }
-        },
-        {
-          "name": "Запустити автоматичне обертання",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"angle\": 10.0,\n  \"speed\": 3.0,\n  \"interval_ms\": 5000\n}"
-            },
-            "description": "Періодично виконує відносний поворот. interval_ms має бути не менше 100.",
-            "url": "{{baseUrl}}/api/automatic/start"
-          }
-        },
-        {
-          "name": "Зупинити автоматичне обертання",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Вимикає автоматичний режим без зупинки руху, що вже виконується.",
-            "url": "{{baseUrl}}/api/automatic/stop"
-          }
-        }
-      ]
-    },
-    {
-      "name": "IMU",
-      "item": [
-        {
-          "name": "Сканувати I2C",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Сканує шину I2C та повертає знайдені адреси.",
-            "url": "{{baseUrl}}/api/imu/scan"
-          }
-        },
-        {
-          "name": "Калібрувати гіроскоп",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Усереднює 500 вимірювань bias. Під час операції IMU має бути нерухомою.",
-            "url": "{{baseUrl}}/api/imu/calibrate"
-          }
-        },
-        {
-          "name": "Зберегти нульову орієнтацію IMU",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Зберігає поточні Pitch і Roll як нульову орієнтацію.",
-            "url": "{{baseUrl}}/api/imu/zero"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Нахил і сервоприводи",
-      "item": [
-        {
-          "name": "Отримати стан нахилу",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Повертає стан серво, поточні та цільові висоту й кути.",
-            "url": "{{baseUrl}}/api/tilt/status"
-          }
-        },
-        {
-          "name": "Отримати налаштування серво",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Повертає конфігурацію PWM-каналів, імпульсів, обмежень і GPIO.",
-            "url": "{{baseUrl}}/api/tilt/settings"
-          }
-        },
-        {
-          "name": "Зберегти налаштування серво",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"enabled\": false,\n  \"min_height_mm\": -25.0,\n  \"max_height_mm\": 25.0,\n  \"max_pitch_deg\": 3.0,\n  \"max_roll_deg\": 3.0,\n  \"max_tilt_speed\": 10.0,\n  \"pulse_per_mm\": 10.0,\n  \"actuator_0_pin\": -1,\n  \"actuator_1_pin\": -1,\n  \"actuator_2_pin\": -1,\n  \"actuator_3_pin\": -1,\n  \"actuator_0_channel\": 0,\n  \"actuator_1_channel\": 1,\n  \"actuator_2_channel\": 2,\n  \"actuator_3_channel\": 3,\n  \"actuator_0_min_us\": 1000,\n  \"actuator_1_min_us\": 1000,\n  \"actuator_2_min_us\": 1000,\n  \"actuator_3_min_us\": 1000,\n  \"actuator_0_max_us\": 2000,\n  \"actuator_1_max_us\": 2000,\n  \"actuator_2_max_us\": 2000,\n  \"actuator_3_max_us\": 2000,\n  \"actuator_0_neutral_us\": 1500,\n  \"actuator_1_neutral_us\": 1500,\n  \"actuator_2_neutral_us\": 1500,\n  \"actuator_3_neutral_us\": 1500,\n  \"actuator_0_offset_mm\": 0.0,\n  \"actuator_1_offset_mm\": 0.0,\n  \"actuator_2_offset_mm\": 0.0,\n  \"actuator_3_offset_mm\": 0.0,\n  \"actuator_0_inverted\": false,\n  \"actuator_1_inverted\": false,\n  \"actuator_2_inverted\": false,\n  \"actuator_3_inverted\": false\n}"
-            },
-            "description": "Зберігає налаштування в NVS. enabled слід вмикати лише після перевірки механіки та живлення.",
-            "url": "{{baseUrl}}/api/tilt/settings"
-          }
-        },
-        {
-          "name": "Перемістити платформу",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"height_mm\": 0.0,\n  \"pitch_deg\": 2.0,\n  \"roll_deg\": -1.0,\n  \"speed\": 5.0\n}"
-            },
-            "description": "Задає площину платформи. Команда відхиляється під час homing або при виході за обмеження.",
-            "url": "{{baseUrl}}/api/tilt/move"
-          }
-        },
-        {
-          "name": "Вирівняти платформу",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Встановлює Pitch і Roll у нуль, зберігаючи поточну висоту.",
-            "url": "{{baseUrl}}/api/tilt/level"
-          }
-        },
-        {
-          "name": "Зупинити сервоприводи",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Зупиняє плавну зміну PWM-сигналів.",
-            "url": "{{baseUrl}}/api/tilt/stop"
-          }
-        },
-        {
-          "name": "Повернути серво в нейтраль",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Команда повертає цільові значення актуаторів у нейтральну площину.",
-            "url": "{{baseUrl}}/api/tilt/home"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Налаштування столу",
-      "item": [
-        {
-          "name": "Отримати налаштування столу та IMU",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Повертає GPIO, кінематику, швидкості, homing і налаштування I2C.",
-            "url": "{{baseUrl}}/api/settings"
-          }
-        },
-        {
-          "name": "Зберегти налаштування столу та IMU",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"pin_step\": 18,\n  \"pin_dir\": 19,\n  \"pin_enable\": 5,\n  \"pin_endstop\": 4,\n  \"pin_button_left\": 25,\n  \"pin_button_right\": 26,\n  \"pin_button_stop\": 27,\n  \"invert_dir\": false,\n  \"endstop_inverted\": false,\n  \"endstop_debounce_ms\": 10,\n  \"button_left_inverted\": false,\n  \"button_right_inverted\": false,\n  \"button_stop_inverted\": false,\n  \"motor_teeth\": 20,\n  \"table_teeth\": 60,\n  \"steps_per_rev\": 200,\n  \"microsteps\": 16,\n  \"default_speed\": 3.0,\n  \"max_speed\": 30.0,\n  \"acceleration\": 15.0,\n  \"button_move_speed\": 3.0,\n  \"button_move_angle\": 1.0,\n  \"homing_direction\": -1,\n  \"auto_home_on_boot\": true,\n  \"i2c_sda_pin\": 21,\n  \"i2c_scl_pin\": 22,\n  \"mpu6050_address\": 104,\n  \"barometer_address\": 119\n}"
-            },
-            "description": "Усі поля необов'язкові: прошивка зберігає поточні значення для відсутніх полів. Зміна GPIO/I2C спричинить перезавантаження.",
-            "url": "{{baseUrl}}/api/settings"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Wi-Fi",
-      "item": [
-        {
-          "name": "Отримати конфігурацію Wi-Fi",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Повертає режим, IP, поточну мережу та збережені SSID.",
-            "url": "{{baseUrl}}/api/wifi/config"
-          }
-        },
-        {
-          "name": "Сканувати мережі Wi-Fi",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Сканує доступні мережі 2.4 ГГц.",
-            "url": "{{baseUrl}}/api/wifi/scan"
-          }
-        },
-        {
-          "name": "Зберегти налаштування Wi-Fi",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sta_ssid\": \"MyWiFi\",\n  \"sta_pass\": \"password\",\n  \"ap_ssid\": \"RotatingTable-ESP32\",\n  \"ap_pass\": \"12345678\"\n}"
-            },
-            "description": "Зберігає STA/SoftAP і планує перезавантаження. Пароль SoftAP має бути порожнім або містити щонайменше 8 символів.",
-            "url": "{{baseUrl}}/api/wifi/save"
-          }
-        },
-        {
-          "name": "Скинути налаштування Wi-Fi",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Скидає мережеві налаштування та планує перезавантаження.",
-            "url": "{{baseUrl}}/api/wifi/reset"
-          }
-        }
-      ]
-    },
-    {
-      "name": "OTA",
-      "item": [
-        {
-          "name": "Перевірити останній реліз",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "description": "Запитує інформацію про останній GitHub-реліз прошивки.",
-            "url": "{{baseUrl}}/api/ota/latest"
-          }
-        },
-        {
-          "name": "Встановити останній реліз",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "description": "Завантажує та встановлює останній BIN-реліз. Потрібне підключення ESP32 до роутера з доступом до Інтернету.",
-            "url": "{{baseUrl}}/api/ota/update"
-          }
-        }
-      ]
-    }
-  ]
+    "info":  {
+                 "_postman_id":  "rotating-table-api-v1",
+                 "name":  "Rotating Table ESP32 API",
+                 "description":  "Колекція REST API для прошивки поворотного столу ESP32. Перед запуском встановіть змінну baseUrl на адресу контролера, наприклад http://192.168.4.1 або http://rotating-table.local.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://192.168.4.1",
+                         "type":  "string",
+                         "description":  "IP-адреса або mDNS-ім\u0027я ESP32 без кінцевої косої риски"
+                     }
+                 ],
+    "item":  [
+                 {
+                     "name":  "Основне керування",
+                     "item":  [
+                                  {
+                                      "name":  "Отримати загальний стан",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "description":  "Повертає стан двигуна обертання, IMU, автоматичного режиму та нахилу.",
+                                                      "url":  "{{baseUrl}}/api/status"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Запустити homing",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Запускає пошук кінцевого вимикача та встановлює нульову позицію.",
+                                                      "url":  "{{baseUrl}}/api/home"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Повернути стіл",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"angle\": 90.0,\n  \"speed\": 3.0,\n  \"relative\": false\n}"
+                                                               },
+                                                      "description":  "angle — абсолютний кут або відносне зміщення; speed — град/с; relative — відносний режим.",
+                                                      "url":  "{{baseUrl}}/api/move"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Зупинити все",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Аварійно зупиняє кроковий двигун.",
+                                                      "url":  "{{baseUrl}}/api/stop"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Встановити поточний кут у нуль",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Без руху встановлює поточну позицію поворотного столу в 0 градусів.",
+                                                      "url":  "{{baseUrl}}/api/zero"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Запустити автоматичне обертання",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"angle\": 10.0,\n  \"speed\": 3.0,\n  \"interval_ms\": 5000\n}"
+                                                               },
+                                                      "description":  "Періодично виконує відносний поворот. interval_ms має бути не менше 100.",
+                                                      "url":  "{{baseUrl}}/api/automatic/start"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Зупинити автоматичне обертання",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Вимикає автоматичний режим без зупинки руху, що вже виконується.",
+                                                      "url":  "{{baseUrl}}/api/automatic/stop"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "IMU",
+                     "item":  [
+                                  {
+                                      "name":  "Сканувати I2C",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "description":  "Сканує шину I2C та повертає знайдені адреси.",
+                                                      "url":  "{{baseUrl}}/api/imu/scan"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Калібрувати гіроскоп",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Усереднює 500 вимірювань bias. Під час операції IMU має бути нерухомою.",
+                                                      "url":  "{{baseUrl}}/api/imu/calibrate"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Зберегти нульову орієнтацію IMU",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Зберігає поточні Pitch і Roll як нульову орієнтацію.",
+                                                      "url":  "{{baseUrl}}/api/imu/zero"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Налаштування столу",
+                     "item":  [
+                                  {
+                                      "name":  "Отримати налаштування столу та IMU",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "description":  "Повертає GPIO, кінематику, швидкості, homing і налаштування I2C.",
+                                                      "url":  "{{baseUrl}}/api/settings"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Зберегти налаштування столу та IMU",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"pin_step\": 18,\n  \"pin_dir\": 19,\n  \"pin_enable\": 5,\n  \"pin_endstop\": 4,\n  \"pin_button_left\": 25,\n  \"pin_button_right\": 26,\n  \"pin_button_stop\": 27,\n  \"invert_dir\": false,\n  \"endstop_inverted\": false,\n  \"endstop_debounce_ms\": 10,\n  \"button_left_inverted\": false,\n  \"button_right_inverted\": false,\n  \"button_stop_inverted\": false,\n  \"motor_teeth\": 20,\n  \"table_teeth\": 60,\n  \"steps_per_rev\": 200,\n  \"microsteps\": 16,\n  \"default_speed\": 3.0,\n  \"max_speed\": 30.0,\n  \"acceleration\": 15.0,\n  \"button_move_speed\": 3.0,\n  \"button_move_angle\": 1.0,\n  \"homing_direction\": -1,\n  \"auto_home_on_boot\": true,\n  \"i2c_sda_pin\": 21,\n  \"i2c_scl_pin\": 22,\n  \"mpu6050_address\": 104,\n  \"barometer_address\": 119\n}"
+                                                               },
+                                                      "description":  "Усі поля необов\u0027язкові: прошивка зберігає поточні значення для відсутніх полів. Зміна GPIO/I2C спричинить перезавантаження.",
+                                                      "url":  "{{baseUrl}}/api/settings"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Wi-Fi",
+                     "item":  [
+                                  {
+                                      "name":  "Отримати конфігурацію Wi-Fi",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "description":  "Повертає режим, IP, поточну мережу та збережені SSID.",
+                                                      "url":  "{{baseUrl}}/api/wifi/config"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Сканувати мережі Wi-Fi",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "description":  "Сканує доступні мережі 2.4 ГГц.",
+                                                      "url":  "{{baseUrl}}/api/wifi/scan"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Зберегти налаштування Wi-Fi",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"sta_ssid\": \"MyWiFi\",\n  \"sta_pass\": \"password\",\n  \"ap_ssid\": \"RotatingTable-ESP32\",\n  \"ap_pass\": \"12345678\"\n}"
+                                                               },
+                                                      "description":  "Зберігає STA/SoftAP і планує перезавантаження. Пароль SoftAP має бути порожнім або містити щонайменше 8 символів.",
+                                                      "url":  "{{baseUrl}}/api/wifi/save"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Скинути налаштування Wi-Fi",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Скидає мережеві налаштування та планує перезавантаження.",
+                                                      "url":  "{{baseUrl}}/api/wifi/reset"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "OTA",
+                     "item":  [
+                                  {
+                                      "name":  "Перевірити останній реліз",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "description":  "Запитує інформацію про останній GitHub-реліз прошивки.",
+                                                      "url":  "{{baseUrl}}/api/ota/latest"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Встановити останній реліз",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Завантажує та встановлює останній BIN-реліз. Потрібне підключення ESP32 до роутера з доступом до Інтернету.",
+                                                      "url":  "{{baseUrl}}/api/ota/update"
+                                                  }
+                                  }
+                              ]
+                 }
+             ]
 }
