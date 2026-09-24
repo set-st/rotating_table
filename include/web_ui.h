@@ -813,7 +813,10 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           Буде використано BIN-файл з останнього релізу репозиторію
           set-st/rotating_table. Не вимикайте живлення під час оновлення.
         </p>
-        <div id="txtOtaRelease" class="info-box">Реліз ще не перевірявся.</div>
+        <div id="txtOtaRelease" class="info-box">
+          Встановлена версія: <strong id="txtCurrentVersion">невідома</strong>.
+          Натисніть «Перевірити реліз», щоб дізнатися про оновлення.
+        </div>
         <div class="btn-row">
           <button type="button" class="btn-secondary" onclick="checkOtaRelease()">Перевірити реліз</button>
           <button type="button" id="btnOtaUpdate" class="btn-success" onclick="updateFromGithub()">Оновити прошивку</button>
@@ -1263,10 +1266,24 @@ POST /api/ota/update</pre>
       output.textContent = 'Перевірка останнього релізу GitHub...';
       const res = await apiCall('/api/ota/latest');
       if (!res || res.status !== 'ok') {
-        output.textContent = 'Помилка: ' + (res ? res.error : 'немає відповіді');
+        output.textContent = 'Встановлена версія: ' + (res && res.current_version ? res.current_version : 'невідома') +
+          '. Помилка перевірки: ' + (res ? (res.error || 'невідома помилка') : 'немає відповіді');
         return;
       }
-      output.textContent = `Реліз ${res.tag}, файл ${res.asset} (${Math.round(res.size / 1024)} КБ)`;
+      document.getElementById('txtCurrentVersion').textContent = res.current_version || 'невідома';
+      const current = String(res.current_version || '').replace(/^v/i, '').split('.').map(Number);
+      const latest = String(res.tag || '').replace(/^v/i, '').split('.').map(Number);
+      let comparison = 0;
+      for (let i = 0; i < Math.max(current.length, latest.length); i++) {
+        if ((latest[i] || 0) !== (current[i] || 0)) {
+          comparison = (latest[i] || 0) > (current[i] || 0) ? 1 : -1;
+          break;
+        }
+      }
+      const newer = comparison > 0;
+      const status = newer ? 'Доступна нова версія.' : 'Встановлена версія актуальна.';
+      output.textContent = `Встановлена: ${res.current_version || 'невідома'}; ` +
+        `останній реліз: ${res.tag} (${status}) Файл: ${res.asset} (${Math.round(res.size / 1024)} КБ)`;
     }
 
     async function updateFromGithub() {
@@ -1293,6 +1310,8 @@ POST /api/ota/update</pre>
       try {
         const st = await apiCall('/api/status');
         if (!st) return;
+        document.getElementById('txtCurrentVersion').textContent =
+          st.firmware_version || 'невідома';
 
         const badge = document.getElementById('badgeState');
         badge.textContent = st.state;

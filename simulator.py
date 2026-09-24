@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent
 WEB_UI = ROOT / "include" / "web_ui.h"
 HOST = "127.0.0.1"
 PORT = 8080
+FIRMWARE_VERSION = "simulator"
 
 
 def load_page() -> str:
@@ -105,6 +106,7 @@ class SimulatorState:
         with self.lock:
             return {
                 "status": "ok",
+                "firmware_version": FIRMWARE_VERSION,
                 "state": self.state,
                 "current_angle": self.current_angle,
                 "target_angle": self.target_angle,
@@ -190,7 +192,13 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/wifi/scan":
             self.send_json({"status": "ok", "networks": []})
         elif path == "/api/ota/latest":
-            self.send_json({"status": "ok", "tag": "simulator", "asset": "simulator", "size": 0})
+            self.send_json({
+                "status": "ok",
+                "current_version": FIRMWARE_VERSION,
+                "tag": FIRMWARE_VERSION,
+                "asset": "simulator",
+                "size": 0,
+            })
         else:
             self.send_json({"status": "error", "error": "Маршрут не знайдено"}, 404)
 

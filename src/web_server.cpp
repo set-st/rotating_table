@@ -94,6 +94,7 @@ void TableWebServer::handleStatus() {
 
     JsonDocument doc;
     doc["status"] = "ok";
+    doc["firmware_version"] = FIRMWARE_VERSION;
     doc["state"] = st.stateStr;
     doc["current_angle"] = st.currentAngle;
     doc["target_angle"] = st.targetAngle;
@@ -212,6 +213,7 @@ void TableWebServer::handleOtaLatest() {
     OtaReleaseInfo info = otaUpdater.getLatestRelease();
     JsonDocument doc;
     doc["status"] = info.available ? "ok" : "error";
+    doc["current_version"] = FIRMWARE_VERSION;
     if (info.available) {
         doc["tag"] = info.tagName;
         doc["asset"] = info.assetName;
