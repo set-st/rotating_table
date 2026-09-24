@@ -388,6 +388,9 @@ void TableWebServer::handleGetSettings() {
     doc["button_move_angle"] = cfg.buttonMoveAngle;
 
     doc["homing_direction"] = cfg.homingDirection;
+    doc["homing_fast_speed"] = cfg.homingFastSpeed;
+    doc["homing_backoff_speed"] = cfg.homingBackoffSpeed;
+    doc["homing_slow_speed"] = cfg.homingSlowSpeed;
     doc["auto_home_on_boot"] = cfg.autoHomeOnBoot;
     ImuConfig imuCfg = imuSensor.getConfig();
     doc["i2c_sda_pin"] = imuCfg.sdaPin;
@@ -453,10 +456,14 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["button_move_speed"].is<float>()) cfg.buttonMoveSpeed = reqDoc["button_move_speed"].as<float>();
     if (reqDoc["button_move_angle"].is<float>()) cfg.buttonMoveAngle = reqDoc["button_move_angle"].as<float>();
 
-    if (cfg.buttonMoveSpeed <= 0.0f || cfg.buttonMoveAngle <= 0.0f) {
+    if (cfg.buttonMoveSpeed <= 0.0f || cfg.buttonMoveAngle <= 0.0f ||
+        cfg.homingFastSpeed <= 0.0f || cfg.homingBackoffSpeed <= 0.0f ||
+        cfg.homingSlowSpeed <= 0.0f || cfg.homingFastSpeed > cfg.maxSpeed ||
+        cfg.homingBackoffSpeed > cfg.maxSpeed ||
+        cfg.homingSlowSpeed > cfg.maxSpeed) {
         JsonDocument errDoc;
         errDoc["status"] = "error";
-        errDoc["error"] = "Швидкість та кут апаратних кнопок повинні бути більшими за 0";
+        errDoc["error"] = "Швидкості повинні бути більшими за 0 і не перевищувати максимальну швидкість";
         String res;
         serializeJson(errDoc, res);
         server.send(400, "application/json", res);
@@ -464,6 +471,9 @@ void TableWebServer::handleSaveSettings() {
     }
 
     if (reqDoc["homing_direction"].is<int>()) cfg.homingDirection = reqDoc["homing_direction"].as<int>();
+    if (reqDoc["homing_fast_speed"].is<float>()) cfg.homingFastSpeed = reqDoc["homing_fast_speed"].as<float>();
+    if (reqDoc["homing_backoff_speed"].is<float>()) cfg.homingBackoffSpeed = reqDoc["homing_backoff_speed"].as<float>();
+    if (reqDoc["homing_slow_speed"].is<float>()) cfg.homingSlowSpeed = reqDoc["homing_slow_speed"].as<float>();
     if (reqDoc["auto_home_on_boot"].is<bool>()) cfg.autoHomeOnBoot = reqDoc["auto_home_on_boot"].as<bool>();
 
     ImuConfig imuCfg = imuSensor.getConfig();

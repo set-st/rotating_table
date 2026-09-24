@@ -633,6 +633,20 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             </select>
           </div>
         </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="inputHomingFastSpeed">Швидкий підхід (°/с):</label>
+            <input type="number" id="inputHomingFastSpeed" value="25" min="0.1" step="0.1">
+          </div>
+          <div class="form-group">
+            <label for="inputHomingBackoffSpeed">Швидкість відкату (°/с):</label>
+            <input type="number" id="inputHomingBackoffSpeed" value="3" min="0.1" step="0.1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="inputHomingSlowSpeed">Повторний точний підхід (°/с):</label>
+          <input type="number" id="inputHomingSlowSpeed" value="5" min="0.1" step="0.1">
+        </div>
 
         <!-- 4. Піни GPIO -->
         <div class="section-title" style="margin-top: 14px;">Призначення пінів ESP32 (GPIO)</div>
@@ -1046,6 +1060,9 @@ POST /api/ota/update</pre>
       document.getElementById('chkBootHome').checked = !!res.auto_home_on_boot;
       document.getElementById('inputDebounceMs').value = res.endstop_debounce_ms ?? 10;
       document.getElementById('selectHomeDir').value = res.homing_direction ?? -1;
+      document.getElementById('inputHomingFastSpeed').value = res.homing_fast_speed ?? 25;
+      document.getElementById('inputHomingBackoffSpeed').value = res.homing_backoff_speed ?? 3;
+      document.getElementById('inputHomingSlowSpeed').value = res.homing_slow_speed ?? 5;
 
       document.getElementById('inputPinStep').value = res.pin_step ?? 18;
       document.getElementById('inputPinDir').value = res.pin_dir ?? 19;
@@ -1083,6 +1100,9 @@ POST /api/ota/update</pre>
         auto_home_on_boot: document.getElementById('chkBootHome').checked,
         endstop_debounce_ms: parseInt(document.getElementById('inputDebounceMs').value),
         homing_direction: parseInt(document.getElementById('selectHomeDir').value),
+        homing_fast_speed: parseFloat(document.getElementById('inputHomingFastSpeed').value),
+        homing_backoff_speed: parseFloat(document.getElementById('inputHomingBackoffSpeed').value),
+        homing_slow_speed: parseFloat(document.getElementById('inputHomingSlowSpeed').value),
 
         pin_step: parseInt(document.getElementById('inputPinStep').value),
         pin_dir: parseInt(document.getElementById('inputPinDir').value),

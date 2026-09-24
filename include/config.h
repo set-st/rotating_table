@@ -75,6 +75,8 @@ constexpr int HOMING_DIRECTION = -1;
 constexpr float HOMING_SPEED_FAST_DEG_S =
     25.0f;                                      // Швидкість швидкого наближення
 constexpr float HOMING_SPEED_SLOW_DEG_S = 5.0f; // Швидкість точного торкання
+constexpr float HOMING_BACKOFF_SPEED_DEG_S =
+    3.0f; // Швидкість відкату перед повторним заходом
 constexpr float HOMING_BACKOFF_DEG = 5.0f; // Кут відкату після першого торкання
 constexpr uint32_t HOMING_TIMEOUT_SEC =
     35; // Таймаут безпеки (запобігає нескінченному руху при обриві)

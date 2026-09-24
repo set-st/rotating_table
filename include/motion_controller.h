@@ -64,6 +64,9 @@ struct HardwareConfig {
 
     // Калібрування (Homing)
     int homingDirection; // -1 (вліво) або +1 (вправо)
+    float homingFastSpeed; // Швидкий підхід (град/с)
+    float homingBackoffSpeed; // Відкат від кінцевика (град/с)
+    float homingSlowSpeed; // Точний повторний підхід (град/с)
     bool autoHomeOnBoot; // Автоматичний пошук нуля при увімкненні
 
     // Розрахунок передаточного числа: Зуби столу / Зуби мотора

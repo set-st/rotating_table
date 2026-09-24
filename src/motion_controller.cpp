@@ -45,6 +45,9 @@ MotionController::MotionController()
   cfg.buttonMoveAngle = BUTTON_MOVE_ANGLE_DEG;
 
   cfg.homingDirection = HOMING_DIRECTION;
+  cfg.homingFastSpeed = HOMING_SPEED_FAST_DEG_S;
+  cfg.homingBackoffSpeed = HOMING_BACKOFF_SPEED_DEG_S;
+  cfg.homingSlowSpeed = HOMING_SPEED_SLOW_DEG_S;
   cfg.autoHomeOnBoot = AUTO_HOME_ON_BOOT;
 }
 
@@ -93,6 +96,12 @@ void MotionController::loadConfig() {
         prefs.getFloat("btn_ang", BUTTON_MOVE_ANGLE_DEG);
 
     cfg.homingDirection = prefs.getInt("home_dir", HOMING_DIRECTION);
+    cfg.homingFastSpeed =
+        prefs.getFloat("home_fast", HOMING_SPEED_FAST_DEG_S);
+    cfg.homingBackoffSpeed =
+        prefs.getFloat("home_back", HOMING_BACKOFF_SPEED_DEG_S);
+    cfg.homingSlowSpeed =
+        prefs.getFloat("home_slow", HOMING_SPEED_SLOW_DEG_S);
     cfg.autoHomeOnBoot = prefs.getBool("boot_home", AUTO_HOME_ON_BOOT);
 
     prefs.end();
@@ -130,6 +139,9 @@ void MotionController::saveConfig() {
     prefs.putFloat("btn_ang", cfg.buttonMoveAngle);
 
     prefs.putInt("home_dir", cfg.homingDirection);
+    prefs.putFloat("home_fast", cfg.homingFastSpeed);
+    prefs.putFloat("home_back", cfg.homingBackoffSpeed);
+    prefs.putFloat("home_slow", cfg.homingSlowSpeed);
     prefs.putBool("boot_home", cfg.autoHomeOnBoot);
 
     prefs.end();
@@ -344,7 +356,7 @@ bool MotionController::startHoming() {
   if (isEndstopPressed()) {
     long backoffSteps = -cfg.homingDirection * degToSteps(HOMING_BACKOFF_DEG);
     stepper.setCurrentPosition(0);
-    stepper.setMaxSpeed(HOMING_SPEED_FAST_DEG_S * currentStepsPerDegree);
+    stepper.setMaxSpeed(cfg.homingBackoffSpeed * currentStepsPerDegree);
     stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
     stepper.moveTo(backoffSteps);
     homingStep = HOME_BACKOFF;
@@ -519,14 +531,14 @@ void MotionController::motionLoop() {
           stepper.setCurrentPosition(0);
           long backoffSteps =
               -cfg.homingDirection * degToSteps(HOMING_BACKOFF_DEG);
-          stepper.setMaxSpeed(HOMING_SPEED_FAST_DEG_S * currentStepsPerDegree);
+          stepper.setMaxSpeed(cfg.homingBackoffSpeed * currentStepsPerDegree);
           stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
           stepper.moveTo(backoffSteps);
           homingStep = HOME_BACKOFF;
           Serial.println(
               "[Motion] Швидкий підхід торкнувся кінцевика, відкат...");
         } else {
-          float speedSteps = cfg.homingDirection * HOMING_SPEED_FAST_DEG_S *
+          float speedSteps = cfg.homingDirection * cfg.homingFastSpeed *
                              currentStepsPerDegree;
           stepper.setSpeed(speedSteps);
           stepper.runSpeed();
@@ -548,7 +560,7 @@ void MotionController::motionLoop() {
           Serial.println("[Motion] Точне торкання, калібрування завершено! "
                          "Позицію встановлено в 0.0°");
         } else {
-          float speedSteps = cfg.homingDirection * HOMING_SPEED_SLOW_DEG_S *
+          float speedSteps = cfg.homingDirection * cfg.homingSlowSpeed *
                              currentStepsPerDegree;
           stepper.setSpeed(speedSteps);
           stepper.runSpeed();

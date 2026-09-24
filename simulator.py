@@ -69,6 +69,9 @@ class SimulatorState:
             "acceleration": 90.0,
             "default_move_speed": 30.0,
             "default_move_angle": 10.0,
+            "homing_fast_speed": 25.0,
+            "homing_backoff_speed": 3.0,
+            "homing_slow_speed": 5.0,
         }
         self.wifi = {
             "sta_ssid": "",
