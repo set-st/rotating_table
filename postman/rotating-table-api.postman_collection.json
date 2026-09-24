@@ -2,17 +2,71 @@
     "info":  {
                  "_postman_id":  "rotating-table-api-v1",
                  "name":  "Rotating Table ESP32 API",
-                 "description":  "Колекція REST API для прошивки поворотного столу ESP32. Перед запуском встановіть змінну baseUrl на адресу контролера, наприклад http://192.168.4.1 або http://rotating-table.local.",
+                 "description":  "Колекція REST API для прошивки поворотного столу ESP32 з автоматичними тестами відповідей. Перед запуском встановіть змінну baseUrl на адресу контролера, наприклад http://192.168.1.77 або http://rotating-table.local.",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
              },
     "variable":  [
                      {
                          "key":  "baseUrl",
-                         "value":  "http://192.168.4.1",
+                         "value":  "http://192.168.1.77",
                          "type":  "string",
                          "description":  "IP-адреса або mDNS-ім\u0027я ESP32 без кінцевої косої риски"
                      }
                  ],
+    "event":  [
+                 {
+                     "listen":  "test",
+                     "script":  {
+                         "type":  "text/javascript",
+                         "exec":  [
+                             "const path = pm.request.url.getPath();",
+                             "const code = pm.response.code;",
+                             "const body = pm.response.json();",
+                             "",
+                             "pm.test('Відповідь повертає JSON', function () {",
+                             "    pm.expect(body).to.be.an('object');",
+                             "});",
+                             "",
+                             "if (path === '/api/ota/update') {",
+                             "    pm.test('OTA повертає очікуваний результат', function () {",
+                             "        pm.expect([200, 409, 500]).to.include(code);",
+                             "    });",
+                             "} else {",
+                             "    pm.test('HTTP-запит успішний', function () {",
+                             "        pm.expect(code).to.be.within(200, 299);",
+                             "    });",
+                             "    pm.test('API повідомляє про успіх', function () {",
+                             "        pm.expect(body.status).to.eql('ok');",
+                             "    });",
+                             "}",
+                             "",
+                             "if (path === '/api/status') {",
+                             "    pm.test('Статус містить стан столу та IMU', function () {",
+                             "        pm.expect(body).to.have.property('state');",
+                             "        pm.expect(body).to.have.property('current_angle');",
+                             "        pm.expect(body).to.have.property('imu_initialized');",
+                             "        pm.expect(body).to.have.property('automatic_enabled');",
+                             "    });",
+                             "}",
+                             "",
+                             "if (path === '/api/settings') {",
+                             "    pm.test('Налаштування містять GPIO та кінематику', function () {",
+                             "        pm.expect(body).to.have.property('pin_step');",
+                             "        pm.expect(body).to.have.property('pin_dir');",
+                             "        pm.expect(body).to.have.property('motor_teeth');",
+                             "        pm.expect(body).to.have.property('table_teeth');",
+                             "    });",
+                             "}",
+                             "",
+                             "if (path === '/api/imu/scan') {",
+                             "    pm.test('Сканування I2C повертає масив адрес', function () {",
+                             "        pm.expect(body.addresses).to.be.an('array');",
+                             "    });",
+                             "}"
+                         ]
+                     }
+                 }
+              ],
     "item":  [
                  {
                      "name":  "Основне керування",
@@ -24,7 +78,7 @@
                                                       "header":  [
 
                                                                  ],
-                                                      "description":  "Повертає стан двигуна обертання, IMU, автоматичного режиму та нахилу.",
+                                                      "description":  "Повертає стан двигуна обертання, IMU та автоматичного режиму.",
                                                       "url":  "{{baseUrl}}/api/status"
                                                   }
                                   },
