@@ -68,6 +68,7 @@ struct HardwareConfig {
     float homingBackoffSpeed; // Відкат від кінцевика (град/с)
     float homingSlowSpeed; // Точний повторний підхід (град/с)
     bool autoHomeOnBoot; // Автоматичний пошук нуля при увімкненні
+    float rotationLimitDeg; // Максимальний кут від нуля в кожен бік
 
     // Розрахунок передаточного числа: Зуби столу / Зуби мотора
     float getGearRatio() const {
@@ -152,6 +153,7 @@ private:
     bool automaticEnabled;
     float automaticAngle;
     float automaticSpeed;
+    int automaticDirection;
     uint32_t automaticIntervalMs;
     uint32_t nextAutomaticAt;
 

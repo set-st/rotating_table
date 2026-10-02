@@ -647,6 +647,11 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <label for="inputHomingSlowSpeed">Повторний точний підхід (°/с):</label>
           <input type="number" id="inputHomingSlowSpeed" value="5" min="0.1" step="0.1">
         </div>
+        <div class="form-group">
+          <label for="inputRotationLimit">Межа повороту від нуля в кожен бік (°):</label>
+          <input type="number" id="inputRotationLimit" value="180" min="1" max="360" step="1">
+          <small>Після Homing стіл рухатиметься в межах від −межі до +межі.</small>
+        </div>
 
         <!-- 4. Піни GPIO -->
         <div class="section-title" style="margin-top: 14px;">Призначення пінів ESP32 (GPIO)</div>
@@ -1066,6 +1071,7 @@ POST /api/ota/update</pre>
       document.getElementById('inputHomingFastSpeed').value = res.homing_fast_speed ?? 25;
       document.getElementById('inputHomingBackoffSpeed').value = res.homing_backoff_speed ?? 3;
       document.getElementById('inputHomingSlowSpeed').value = res.homing_slow_speed ?? 5;
+      document.getElementById('inputRotationLimit').value = res.rotation_limit_deg ?? 180;
 
       document.getElementById('inputPinStep').value = res.pin_step ?? 18;
       document.getElementById('inputPinDir').value = res.pin_dir ?? 19;
@@ -1106,6 +1112,7 @@ POST /api/ota/update</pre>
         homing_fast_speed: parseFloat(document.getElementById('inputHomingFastSpeed').value),
         homing_backoff_speed: parseFloat(document.getElementById('inputHomingBackoffSpeed').value),
         homing_slow_speed: parseFloat(document.getElementById('inputHomingSlowSpeed').value),
+        rotation_limit_deg: parseFloat(document.getElementById('inputRotationLimit').value),
 
         pin_step: parseInt(document.getElementById('inputPinStep').value),
         pin_dir: parseInt(document.getElementById('inputPinDir').value),

@@ -394,6 +394,7 @@ void TableWebServer::handleGetSettings() {
     doc["homing_backoff_speed"] = cfg.homingBackoffSpeed;
     doc["homing_slow_speed"] = cfg.homingSlowSpeed;
     doc["auto_home_on_boot"] = cfg.autoHomeOnBoot;
+    doc["rotation_limit_deg"] = cfg.rotationLimitDeg;
     ImuConfig imuCfg = imuSensor.getConfig();
     doc["i2c_sda_pin"] = imuCfg.sdaPin;
     doc["i2c_scl_pin"] = imuCfg.sclPin;
@@ -477,6 +478,17 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["homing_backoff_speed"].is<float>()) cfg.homingBackoffSpeed = reqDoc["homing_backoff_speed"].as<float>();
     if (reqDoc["homing_slow_speed"].is<float>()) cfg.homingSlowSpeed = reqDoc["homing_slow_speed"].as<float>();
     if (reqDoc["auto_home_on_boot"].is<bool>()) cfg.autoHomeOnBoot = reqDoc["auto_home_on_boot"].as<bool>();
+    if (reqDoc["rotation_limit_deg"].is<float>()) cfg.rotationLimitDeg = reqDoc["rotation_limit_deg"].as<float>();
+
+    if (cfg.rotationLimitDeg < 1.0f || cfg.rotationLimitDeg > 360.0f) {
+        JsonDocument errDoc;
+        errDoc["status"] = "error";
+        errDoc["error"] = "Межа повороту має бути від 1 до 360 градусів";
+        String res;
+        serializeJson(errDoc, res);
+        server.send(400, "application/json", res);
+        return;
+    }
 
     ImuConfig imuCfg = imuSensor.getConfig();
     if (reqDoc["i2c_sda_pin"].is<int>()) imuCfg.sdaPin = reqDoc["i2c_sda_pin"].as<int>();

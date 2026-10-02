@@ -18,6 +18,10 @@
 - **Налаштування Homing**:
   - Швидкість швидкого підходу, відкату від кінцевика та повторного точного
     підходу змінюються у веб-інтерфейсі й зберігаються в NVS.
+- **Обмеження повороту після Homing**:
+  - Максимальний кут від нуля в кожен бік задається в адмінці (за замовчуванням
+    180°), тож звичайні команди не виходять за межі `−межа…+межа`.
+  - В автоматичному режимі напрямок змінюється на кожній межі.
 
 - **Калібрування 0° (Homing)**:
   - Автоматично при вмиканні пристрою (налаштовується).
@@ -223,7 +227,8 @@ curl -X POST http://rotating-table.local/api/home -H "Content-Type: application/
   {
     "status": "ok",
     "endstop_inverted": false,
-    "endstop_debounce_ms": 10
+    "endstop_debounce_ms": 10,
+    "rotation_limit_deg": 180
   }
   ```
 
@@ -238,7 +243,8 @@ curl -X POST http://rotating-table.local/api/home -H "Content-Type: application/
   ```json
   {
     "endstop_inverted": true,
-    "endstop_debounce_ms": 15
+    "endstop_debounce_ms": 15,
+    "rotation_limit_deg": 180
   }
   ```
 

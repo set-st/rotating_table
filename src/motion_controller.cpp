@@ -14,7 +14,8 @@ MotionController::MotionController()
       previousButtonLeft(false), previousButtonRight(false),
       previousButtonStop(false), homingStep(HOME_FAST_APPROACH),
       homingStartTime(0), automaticEnabled(false), automaticAngle(0.0f),
-      automaticSpeed(0.0f), automaticIntervalMs(0), nextAutomaticAt(0) {
+      automaticSpeed(0.0f), automaticDirection(1), automaticIntervalMs(0),
+      nextAutomaticAt(0) {
   memset(lastError, 0, sizeof(lastError));
 
   // Початкові налаштування за замовчуванням
@@ -49,6 +50,7 @@ MotionController::MotionController()
   cfg.homingBackoffSpeed = HOMING_BACKOFF_SPEED_DEG_S;
   cfg.homingSlowSpeed = HOMING_SPEED_SLOW_DEG_S;
   cfg.autoHomeOnBoot = AUTO_HOME_ON_BOOT;
+  cfg.rotationLimitDeg = DEFAULT_ROTATION_LIMIT_DEG;
 }
 
 MotionController::~MotionController() {
@@ -103,6 +105,8 @@ void MotionController::loadConfig() {
     cfg.homingSlowSpeed =
         prefs.getFloat("home_slow", HOMING_SPEED_SLOW_DEG_S);
     cfg.autoHomeOnBoot = prefs.getBool("boot_home", AUTO_HOME_ON_BOOT);
+    cfg.rotationLimitDeg =
+        prefs.getFloat("rot_limit", DEFAULT_ROTATION_LIMIT_DEG);
 
     prefs.end();
   }
@@ -143,6 +147,7 @@ void MotionController::saveConfig() {
     prefs.putFloat("home_back", cfg.homingBackoffSpeed);
     prefs.putFloat("home_slow", cfg.homingSlowSpeed);
     prefs.putBool("boot_home", cfg.autoHomeOnBoot);
+    prefs.putFloat("rot_limit", cfg.rotationLimitDeg);
 
     prefs.end();
   }
@@ -179,6 +184,11 @@ bool MotionController::applyConfig(const HardwareConfig &newCfg,
   cfg = newCfg;
   saveConfig();
   applyKinematics();
+  if (isHomed && state == STATE_MOVING) {
+    targetAngleDeg =
+        constrain(targetAngleDeg, -cfg.rotationLimitDeg, cfg.rotationLimitDeg);
+    stepper.moveTo(degToSteps(targetAngleDeg));
+  }
 
   xSemaphoreGive(mutex);
   Serial.println(
@@ -348,6 +358,7 @@ bool MotionController::startHoming() {
 
   Serial.println("[Motion] Запуск процедури калібрування (Homing)...");
   setDriverEnabled(true);
+  isHomed = false;
 
   homingStartTime = millis();
   homingStep = HOME_FAST_APPROACH;
@@ -387,15 +398,19 @@ bool MotionController::moveTo(float angleDeg, float speedDegS, bool relative) {
   stepper.setMaxSpeed(speedDegS * currentStepsPerDegree);
   stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
 
-  long targetSteps = 0;
+  float requestedAngle = 0.0f;
   if (relative) {
-    targetSteps = stepper.currentPosition() + degToSteps(angleDeg);
-    targetAngleDeg = stepsToDeg(targetSteps);
+    requestedAngle = stepsToDeg(stepper.currentPosition()) + angleDeg;
   } else {
-    targetSteps = degToSteps(angleDeg);
-    targetAngleDeg = angleDeg;
+    requestedAngle = angleDeg;
   }
 
+  if (isHomed) {
+    requestedAngle =
+        constrain(requestedAngle, -cfg.rotationLimitDeg, cfg.rotationLimitDeg);
+  }
+  const long targetSteps = degToSteps(requestedAngle);
+  targetAngleDeg = stepsToDeg(targetSteps);
   stepper.moveTo(targetSteps);
   setState(STATE_MOVING);
 
@@ -431,6 +446,7 @@ bool MotionController::startAutomatic(float angleDeg, float speedDegS,
   }
   automaticAngle = angleDeg;
   automaticSpeed = speedDegS;
+  automaticDirection = angleDeg < 0.0f ? -1 : 1;
   automaticIntervalMs = intervalMs;
   automaticEnabled = true;
   nextAutomaticAt = millis();
@@ -511,7 +527,31 @@ void MotionController::motionLoop() {
     handleHardwareButtons();
     if (automaticEnabled && state == STATE_IDLE &&
         static_cast<int32_t>(millis() - nextAutomaticAt) >= 0) {
-      if (moveTo(automaticAngle, automaticSpeed, true)) {
+      float moveAngle = automaticAngle;
+      if (isHomed) {
+        const float currentAngle = stepsToDeg(stepper.currentPosition());
+        const float limit = cfg.rotationLimitDeg;
+        const float stepAngle = fabsf(automaticAngle);
+
+        if (currentAngle >= limit && automaticDirection > 0) {
+          automaticDirection = -1;
+        } else if (currentAngle <= -limit && automaticDirection < 0) {
+          automaticDirection = 1;
+        }
+
+        float nextAngle =
+            currentAngle + automaticDirection * stepAngle;
+        if (nextAngle >= limit) {
+          nextAngle = limit;
+          automaticDirection = -1;
+        } else if (nextAngle <= -limit) {
+          nextAngle = -limit;
+          automaticDirection = 1;
+        }
+        moveAngle = nextAngle - currentAngle;
+      }
+
+      if (moveTo(moveAngle, automaticSpeed, true)) {
         nextAutomaticAt = millis() + automaticIntervalMs;
       }
     }

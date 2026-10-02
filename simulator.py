@@ -73,6 +73,7 @@ class SimulatorState:
             "homing_fast_speed": 25.0,
             "homing_backoff_speed": 3.0,
             "homing_slow_speed": 5.0,
+            "rotation_limit_deg": 180.0,
         }
         self.wifi = {
             "sta_ssid": "",
@@ -96,7 +97,15 @@ class SimulatorState:
                 else:
                     self.current_angle += step if delta > 0 else -step
             if self.automatic_enabled and self.state == "IDLE" and now >= self.next_automatic_at:
-                self.target_angle = self.current_angle + self.automatic_angle
+                next_angle = self.current_angle + self.automatic_angle
+                if self.is_homed:
+                    limit = float(self.settings["rotation_limit_deg"])
+                    if next_angle >= limit:
+                        self.automatic_angle = -abs(self.automatic_angle)
+                    elif next_angle <= -limit:
+                        self.automatic_angle = abs(self.automatic_angle)
+                    next_angle = max(-limit, min(limit, next_angle))
+                self.target_angle = next_angle
                 self.speed = self.automatic_speed
                 self.state = "MOVING"
                 self.next_automatic_at = now + self.automatic_interval_ms / 1000.0
@@ -134,6 +143,9 @@ class SimulatorState:
             angle = float(body.get("angle", 0))
             speed = max(float(body.get("speed", self.settings["default_move_speed"])), 1.0)
             self.target_angle = self.current_angle + angle if body.get("relative") else angle
+            if self.is_homed:
+                limit = float(self.settings["rotation_limit_deg"])
+                self.target_angle = max(-limit, min(limit, self.target_angle))
             self.speed = min(speed, float(self.settings["max_speed"]))
             self.state = "MOVING"
             self.error = ""
@@ -242,6 +254,22 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.automatic_enabled = False
             self.send_json({"status": "ok"})
         elif path == "/api/settings":
+            if "rotation_limit_deg" in body:
+                try:
+                    limit = float(body["rotation_limit_deg"])
+                except (TypeError, ValueError):
+                    self.send_json({
+                        "status": "error",
+                        "error": "Межа повороту має бути числом від 1 до 360 градусів",
+                    }, 400)
+                    return
+                if not math.isfinite(limit) or not 1.0 <= limit <= 360.0:
+                    self.send_json({
+                        "status": "error",
+                        "error": "Межа повороту має бути числом від 1 до 360 градусів",
+                    }, 400)
+                    return
+                body["rotation_limit_deg"] = limit
             with STATE.lock:
                 STATE.settings.update(body)
             self.send_json({"status": "ok", "reboot_required": False})
