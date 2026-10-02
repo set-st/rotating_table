@@ -52,6 +52,9 @@ class SimulatorState:
             "steps_per_rev": 200,
             "microsteps": 16,
             "invert_dir": False,
+            "dir_positive_high": True,
+            "step_active_low": False,
+            "enable_active_high": False,
             "pin_step": 25,
             "pin_dir": 26,
             "pin_enable": 27,
@@ -254,6 +257,10 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.automatic_enabled = False
             self.send_json({"status": "ok"})
         elif path == "/api/settings":
+            if "dir_positive_high" not in body and "invert_dir" in body:
+                body["dir_positive_high"] = not bool(body["invert_dir"])
+            if "dir_positive_high" in body:
+                body["invert_dir"] = not bool(body["dir_positive_high"])
             if "rotation_limit_deg" in body:
                 try:
                     limit = float(body["rotation_limit_deg"])

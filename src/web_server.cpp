@@ -369,7 +369,10 @@ void TableWebServer::handleGetSettings() {
     doc["pin_button_right"] = cfg.pinButtonRight;
     doc["pin_button_stop"] = cfg.pinButtonStop;
 
-    doc["invert_dir"] = cfg.invertDir;
+    doc["invert_dir"] = !cfg.dirPositiveHigh;
+    doc["dir_positive_high"] = cfg.dirPositiveHigh;
+    doc["step_active_low"] = cfg.stepActiveLow;
+    doc["enable_active_high"] = cfg.enableActiveHigh;
     doc["endstop_inverted"] = cfg.endstopInverted;
     doc["endstop_debounce_ms"] = cfg.endstopDebounceMs;
     doc["button_left_inverted"] = cfg.buttonLeftInverted;
@@ -441,7 +444,10 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["pin_button_right"].is<int>()) cfg.pinButtonRight = reqDoc["pin_button_right"].as<int>();
     if (reqDoc["pin_button_stop"].is<int>()) cfg.pinButtonStop = reqDoc["pin_button_stop"].as<int>();
 
-    if (reqDoc["invert_dir"].is<bool>()) cfg.invertDir = reqDoc["invert_dir"].as<bool>();
+    if (reqDoc["invert_dir"].is<bool>()) cfg.dirPositiveHigh = !reqDoc["invert_dir"].as<bool>();
+    if (reqDoc["dir_positive_high"].is<bool>()) cfg.dirPositiveHigh = reqDoc["dir_positive_high"].as<bool>();
+    if (reqDoc["step_active_low"].is<bool>()) cfg.stepActiveLow = reqDoc["step_active_low"].as<bool>();
+    if (reqDoc["enable_active_high"].is<bool>()) cfg.enableActiveHigh = reqDoc["enable_active_high"].as<bool>();
     if (reqDoc["endstop_inverted"].is<bool>()) cfg.endstopInverted = reqDoc["endstop_inverted"].as<bool>();
     if (reqDoc["endstop_debounce_ms"].is<uint32_t>()) cfg.endstopDebounceMs = reqDoc["endstop_debounce_ms"].as<uint32_t>();
     if (reqDoc["button_left_inverted"].is<bool>()) cfg.buttonLeftInverted = reqDoc["button_left_inverted"].as<bool>();

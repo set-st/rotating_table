@@ -27,7 +27,9 @@ MotionController::MotionController()
   cfg.pinButtonRight = PIN_BUTTON_RIGHT;
   cfg.pinButtonStop = PIN_BUTTON_STOP;
 
-  cfg.invertDir = INVERT_DIR;
+  cfg.dirPositiveHigh = !INVERT_DIR;
+  cfg.stepActiveLow = false;
+  cfg.enableActiveHigh = !ENABLE_ACTIVE_LOW;
   cfg.endstopInverted = DEFAULT_ENDSTOP_INVERTED;
   cfg.endstopDebounceMs = DEFAULT_ENDSTOP_DEBOUNCE_MS;
   cfg.buttonLeftInverted = BUTTON_LEFT_INVERTED;
@@ -73,7 +75,10 @@ void MotionController::loadConfig() {
     cfg.pinButtonRight = prefs.getInt("p_btn_r", PIN_BUTTON_RIGHT);
     cfg.pinButtonStop = prefs.getInt("p_btn_s", PIN_BUTTON_STOP);
 
-    cfg.invertDir = prefs.getBool("inv_dir", INVERT_DIR);
+    cfg.dirPositiveHigh = prefs.getBool(
+        "dir_high", !prefs.getBool("inv_dir", INVERT_DIR));
+    cfg.stepActiveLow = prefs.getBool("step_low", false);
+    cfg.enableActiveHigh = prefs.getBool("en_high", !ENABLE_ACTIVE_LOW);
     cfg.endstopInverted = prefs.getBool("es_inv", DEFAULT_ENDSTOP_INVERTED);
     cfg.endstopDebounceMs =
         prefs.getUInt("es_deb", DEFAULT_ENDSTOP_DEBOUNCE_MS);
@@ -124,7 +129,10 @@ void MotionController::saveConfig() {
     prefs.putInt("p_btn_r", cfg.pinButtonRight);
     prefs.putInt("p_btn_s", cfg.pinButtonStop);
 
-    prefs.putBool("inv_dir", cfg.invertDir);
+    prefs.putBool("inv_dir", !cfg.dirPositiveHigh);
+    prefs.putBool("dir_high", cfg.dirPositiveHigh);
+    prefs.putBool("step_low", cfg.stepActiveLow);
+    prefs.putBool("en_high", cfg.enableActiveHigh);
     prefs.putBool("es_inv", cfg.endstopInverted);
     prefs.putUInt("es_deb", cfg.endstopDebounceMs);
     prefs.putBool("btn_l_inv", cfg.buttonLeftInverted);
@@ -159,7 +167,7 @@ void MotionController::applyKinematics() {
     currentStepsPerDegree = 1.0f;
   }
 
-  stepper.setPinsInverted(cfg.invertDir, false, false);
+  stepper.setPinsInverted(!cfg.dirPositiveHigh, cfg.stepActiveLow, false);
   stepper.setMaxSpeed(cfg.maxSpeed * currentStepsPerDegree);
   stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
 }
@@ -184,6 +192,7 @@ bool MotionController::applyConfig(const HardwareConfig &newCfg,
   cfg = newCfg;
   saveConfig();
   applyKinematics();
+  setDriverEnabled(true);
   if (isHomed && state == STATE_MOVING) {
     targetAngleDeg =
         constrain(targetAngleDeg, -cfg.rotationLimitDeg, cfg.rotationLimitDeg);
@@ -245,7 +254,7 @@ bool MotionController::begin() {
   Serial.printf("         Кроків на 1°: %.3f\n", currentStepsPerDegree);
   Serial.printf(
       "         Піни: STEP=%d, DIR=%d (інверсія: %s), EN=%d, ENDSTOP=%d\n",
-      cfg.pinStep, cfg.pinDir, cfg.invertDir ? "ТАК" : "НІ", cfg.pinEnable,
+      cfg.pinStep, cfg.pinDir, cfg.dirPositiveHigh ? "HIGH+" : "LOW+", cfg.pinEnable,
       cfg.pinEndstop);
 
   // Запуск фонового завдання на CORE 0.
@@ -263,8 +272,8 @@ bool MotionController::begin() {
 
 void MotionController::setDriverEnabled(bool enable) {
   if (cfg.pinEnable >= 0) {
-    bool pinLevel = enable ? (ENABLE_ACTIVE_LOW ? LOW : HIGH)
-                           : (ENABLE_ACTIVE_LOW ? HIGH : LOW);
+    bool pinLevel = enable ? (cfg.enableActiveHigh ? HIGH : LOW)
+                           : (cfg.enableActiveHigh ? LOW : HIGH);
     digitalWrite(cfg.pinEnable, pinLevel);
   }
 }

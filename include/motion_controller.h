@@ -40,7 +40,9 @@ struct HardwareConfig {
     int pinButtonStop;
 
     // Напрямок та кінцевик
-    bool invertDir;
+    bool dirPositiveHigh;
+    bool stepActiveLow;
+    bool enableActiveHigh;
     bool endstopInverted;
     uint32_t endstopDebounceMs;
     bool buttonLeftInverted;

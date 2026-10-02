@@ -583,11 +583,28 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 
         <!-- 2. Напрямок та обмеження швидкості -->
         <div class="section-title" style="margin-top: 14px;">Керування двигуном та напрямок</div>
-        <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-          <input type="checkbox" id="chkInvertDir" style="width: 20px; height: 20px; cursor: pointer;">
-          <label for="chkInvertDir" style="margin-bottom: 0; cursor: pointer; font-size: 0.95rem; color: var(--text);">
-            Інвертувати напрямок обертання двигуна (DIR)
-          </label>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="selectDirPositiveLevel">Рівень DIR для додатного напрямку:</label>
+            <select id="selectDirPositiveLevel">
+              <option value="1">HIGH</option>
+              <option value="0">LOW</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="selectStepActiveLevel">Активний рівень STEP:</label>
+            <select id="selectStepActiveLevel">
+              <option value="0">HIGH</option>
+              <option value="1">LOW</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="selectEnableActiveLevel">Активний рівень ENABLE:</label>
+          <select id="selectEnableActiveLevel">
+            <option value="0">LOW</option>
+            <option value="1">HIGH</option>
+          </select>
         </div>
 
         <div class="grid-2">
@@ -1058,7 +1075,9 @@ POST /api/ota/update</pre>
       document.getElementById('selectMotorSteps').value = res.steps_per_rev ?? 200;
       document.getElementById('selectMicrosteps').value = res.microsteps ?? 16;
 
-      document.getElementById('chkInvertDir').checked = !!res.invert_dir;
+      document.getElementById('selectDirPositiveLevel').value = (res.dir_positive_high ?? !res.invert_dir) ? '1' : '0';
+      document.getElementById('selectStepActiveLevel').value = res.step_active_low ? '1' : '0';
+      document.getElementById('selectEnableActiveLevel').value = res.enable_active_high ? '1' : '0';
       document.getElementById('inputDefSpeed').value = res.default_speed ?? 30;
       document.getElementById('inputMaxSpeed').value = res.max_speed ?? 180;
       updateSpeedSliderLimit(document.getElementById('inputMaxSpeed').value);
@@ -1100,7 +1119,9 @@ POST /api/ota/update</pre>
         steps_per_rev: parseFloat(document.getElementById('selectMotorSteps').value),
         microsteps: parseFloat(document.getElementById('selectMicrosteps').value),
 
-        invert_dir: document.getElementById('chkInvertDir').checked,
+        dir_positive_high: document.getElementById('selectDirPositiveLevel').value === '1',
+        step_active_low: document.getElementById('selectStepActiveLevel').value === '1',
+        enable_active_high: document.getElementById('selectEnableActiveLevel').value === '1',
         default_speed: parseFloat(document.getElementById('inputDefSpeed').value),
         max_speed: parseFloat(document.getElementById('inputMaxSpeed').value),
         acceleration: parseFloat(document.getElementById('inputAccel').value),
