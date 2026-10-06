@@ -5,6 +5,7 @@
 #include "config.h"
 #include "imu_sensor.h"
 #include "ota_updater.h"
+#include "table_ble_client.h"
 #include <ArduinoJson.h>
 
 TableWebServer webServer;
@@ -50,19 +51,34 @@ void TableWebServer::setupRoutes() {
     server.on("/api/automatic/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/ota/latest", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/ota/update", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/ota/tilt/latest", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/ota/tilt/update", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/config", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/save", HTTP_OPTIONS, [this]() { handleOptions(); });
     server.on("/api/wifi/reset", HTTP_OPTIONS, [this]() { handleOptions(); });
 
-    // REST API ендпоінти
+    // CORS preflight запити для платформи нахилу
+    server.on("/api/tilt/status", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/move", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/home", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/stop", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/gyro/zero", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/gyro/calibrate", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/hold", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/settings", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/bt/scan", HTTP_OPTIONS, [this]() { handleOptions(); });
+    server.on("/api/tilt/bt/connect", HTTP_OPTIONS, [this]() { handleOptions(); });
+
+    // REST API ендпоінти столу
     server.on("/api/status", HTTP_GET, [this]() { handleStatus(); });
     server.on("/api/home", HTTP_POST, [this]() { handleHome(); });
     server.on("/api/move", HTTP_POST, [this]() { handleMove(); });
     server.on("/api/stop", HTTP_POST, [this]() { handleStop(); });
     server.on("/api/zero", HTTP_POST, [this]() { handleZero(); });
 
-    // Налаштування кінцевика
+    // Налаштування кінцевика столу
     server.on("/api/settings", HTTP_GET, [this]() { handleGetSettings(); });
     server.on("/api/settings", HTTP_POST, [this]() { handleSaveSettings(); });
     server.on("/api/imu/scan", HTTP_GET, [this]() { handleImuScan(); });
@@ -72,12 +88,28 @@ void TableWebServer::setupRoutes() {
     server.on("/api/automatic/stop", HTTP_POST, [this]() { handleAutomaticStop(); });
     server.on("/api/ota/latest", HTTP_GET, [this]() { handleOtaLatest(); });
     server.on("/api/ota/update", HTTP_POST, [this]() { handleOtaUpdate(); });
+    server.on("/api/ota/tilt/latest", HTTP_GET, [this]() { handleTiltOtaLatest(); });
+    server.on("/api/ota/tilt/update", HTTP_POST, [this]() { handleTiltOtaUpdate(); });
 
     // Налаштування Wi-Fi
     server.on("/api/wifi/config", HTTP_GET, [this]() { handleWiFiConfig(); });
     server.on("/api/wifi/scan", HTTP_GET, [this]() { handleWiFiScan(); });
     server.on("/api/wifi/save", HTTP_POST, [this]() { handleWiFiSave(); });
     server.on("/api/wifi/reset", HTTP_POST, [this]() { handleWiFiReset(); });
+
+    // REST API ендпоінти платформи нахилу (Bluetooth)
+    server.on("/api/tilt/status", HTTP_GET, [this]() { handleTiltStatus(); });
+    server.on("/api/tilt/move", HTTP_POST, [this]() { handleTiltMove(); });
+    server.on("/api/tilt/home", HTTP_POST, [this]() { handleTiltHome(); });
+    server.on("/api/tilt/stop", HTTP_POST, [this]() { handleTiltStop(); });
+    server.on("/api/tilt/zero", HTTP_POST, [this]() { handleTiltZero(); });
+    server.on("/api/tilt/gyro/zero", HTTP_POST, [this]() { handleTiltGyroZero(); });
+    server.on("/api/tilt/gyro/calibrate", HTTP_POST, [this]() { handleTiltGyroCalibrate(); });
+    server.on("/api/tilt/hold", HTTP_POST, [this]() { handleTiltHold(); });
+    server.on("/api/tilt/settings", HTTP_GET, [this]() { handleTiltGetSettings(); });
+    server.on("/api/tilt/settings", HTTP_POST, [this]() { handleTiltSaveSettings(); });
+    server.on("/api/tilt/bt/scan", HTTP_GET, [this]() { handleTiltBtScan(); });
+    server.on("/api/tilt/bt/connect", HTTP_POST, [this]() { handleTiltBtConnect(); });
 
     // 404 Сторінку не знайдено
     server.onNotFound([this]() { handleNotFound(); });
@@ -249,6 +281,54 @@ void TableWebServer::handleOtaUpdate() {
     if (success) {
         wifiMgr.scheduleRestart(1500);
     }
+}
+
+void TableWebServer::handleTiltOtaLatest() {
+    sendCorsHeaders();
+    OtaReleaseInfo info = otaUpdater.getLatestRelease("tilt_platform.bin");
+    const TiltStatus tilt = tableBleClient.getStatus();
+    JsonDocument doc;
+    doc["status"] = info.available ? "ok" : "error";
+    doc["current_version"] = tableBleClient.isConnected()
+                                 ? tilt.firmwareVersion
+                                 : "unknown";
+    doc["connected"] = tableBleClient.isConnected();
+    if (info.available) {
+        doc["tag"] = info.tagName;
+        doc["asset"] = info.assetName;
+        doc["size"] = info.assetSize;
+    } else {
+        doc["error"] = info.error;
+    }
+    String response;
+    serializeJson(doc, response);
+    server.send(info.available ? 200 : 502, "application/json", response);
+}
+
+void TableWebServer::handleTiltOtaUpdate() {
+    sendCorsHeaders();
+    if (!wifiMgr.isConnectedSTA()) {
+        server.send(503, "application/json",
+                    "{\"status\":\"error\",\"message\":\"Потрібне Wi-Fi підключення основної плати до Інтернету\"}");
+        return;
+    }
+    if (!tableBleClient.isConnected()) {
+        server.send(503, "application/json",
+                    "{\"status\":\"error\",\"message\":\"Плата нахилу не підключена через BLE\"}");
+        return;
+    }
+
+    String error;
+    const bool success =
+        otaUpdater.installTiltLatestRelease(tableBleClient, error);
+    JsonDocument doc;
+    doc["status"] = success ? "ok" : "error";
+    doc["message"] = success
+                         ? "Прошивку плати нахилу записано. Slave перезавантажиться; не вимикайте живлення."
+                         : error;
+    String response;
+    serializeJson(doc, response);
+    server.send(success ? 200 : 502, "application/json", response);
 }
 
 void TableWebServer::handleHome() {
@@ -673,4 +753,181 @@ void TableWebServer::handleNotFound() {
     String res;
     serializeJson(doc, res);
     server.send(404, "application/json", res);
+}
+
+// =============================================================================
+// ОБРОБНИКИ ДЛЯ ПЛАТФОРМИ НАХИЛУ (ЧЕРЕЗ BLUETOOTH BLE)
+// =============================================================================
+void TableWebServer::handleTiltStatus() {
+    sendCorsHeaders();
+    TiltStatus st = tableBleClient.getStatus();
+    JsonDocument doc;
+    doc["status"] = "ok";
+    doc["connected"] = tableBleClient.isConnected();
+    doc["rssi"] = tableBleClient.getRssi();
+    doc["target_address"] = tableBleClient.getTargetAddress();
+    doc["firmware_version"] = st.firmwareVersion;
+    doc["auto_connect"] = tableBleClient.isAutoConnect();
+    doc["state"] = st.stateStr;
+    doc["angle"] = st.gyroAngle;
+    doc["motor_angle"] = st.motorAngle;
+    doc["target_angle"] = st.targetAngle;
+    doc["speed"] = st.currentSpeed;
+    doc["is_homed"] = st.isHomed;
+    doc["endstop_triggered"] = st.endstopTriggered;
+    doc["hold_active"] = st.holdActive;
+    doc["gyro_connected"] = st.gyroConnected;
+    doc["pitch"] = st.pitchDeg;
+    doc["roll"] = st.rollDeg;
+    if (strlen(st.errorMessage) > 0) {
+        doc["error"] = st.errorMessage;
+    }
+    String res;
+    serializeJson(doc, res);
+    server.send(200, "application/json", res);
+}
+
+void TableWebServer::handleTiltMove() {
+    sendCorsHeaders();
+    if (!server.hasArg("plain")) {
+        server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Missing body\"}");
+        return;
+    }
+    JsonDocument doc;
+    if (deserializeJson(doc, server.arg("plain"))) {
+        server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Invalid JSON\"}");
+        return;
+    }
+    float angle = doc["angle"] | 0.0f;
+    float speed = doc["speed"] | 0.0f;
+    bool relative = doc["relative"] | false;
+    if (tableBleClient.sendMove(angle, speed, relative)) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Команду нахилу надіслано\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена через Bluetooth\"}");
+    }
+}
+
+void TableWebServer::handleTiltHome() {
+    sendCorsHeaders();
+    if (tableBleClient.sendHome()) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Пошук крайньої точки запущено\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена\"}");
+    }
+}
+
+void TableWebServer::handleTiltStop() {
+    sendCorsHeaders();
+    if (tableBleClient.sendStop()) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Нахил зупинено\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена\"}");
+    }
+}
+
+void TableWebServer::handleTiltZero() {
+    sendCorsHeaders();
+    if (tableBleClient.sendZero()) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Нульову точку двигуна встановлено\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена\"}");
+    }
+}
+
+void TableWebServer::handleTiltGyroZero() {
+    sendCorsHeaders();
+    if (tableBleClient.sendGyroZero()) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Нуль гіроскопа збережено в NVS пам'ять\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена\"}");
+    }
+}
+
+void TableWebServer::handleTiltGyroCalibrate() {
+    sendCorsHeaders();
+    if (tableBleClient.sendGyroCalibrate()) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Калібрування гіроскопа запущено\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена\"}");
+    }
+}
+
+void TableWebServer::handleTiltHold() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    if (server.hasArg("plain")) {
+        deserializeJson(doc, server.arg("plain"));
+    }
+    bool enabled = doc["enabled"] | false;
+    float target = doc["target"] | 0.0f;
+    if (tableBleClient.sendHold(enabled, target)) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Режим стабілізації оновлено\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Плата нахилу не підключена\"}");
+    }
+}
+
+void TableWebServer::handleTiltGetSettings() {
+    sendCorsHeaders();
+    String settingsJson = tableBleClient.getSettingsJson();
+    if (settingsJson.length() > 5) {
+        server.send(200, "application/json", settingsJson);
+    } else {
+        server.send(200, "application/json", "{\"status\":\"error\",\"error\":\"Налаштування ще не отримано\"}");
+    }
+}
+
+void TableWebServer::handleTiltSaveSettings() {
+    sendCorsHeaders();
+    if (!server.hasArg("plain")) {
+        server.send(400, "application/json", "{\"status\":\"error\",\"error\":\"Відсутнє тіло запиту\"}");
+        return;
+    }
+    String body = server.arg("plain");
+    if (tableBleClient.sendSettings(body)) {
+        server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Налаштування збережено на платі нахилу\"}");
+    } else {
+        server.send(503, "application/json", "{\"status\":\"error\",\"error\":\"Помилка надсилання: плата офлайн\"}");
+    }
+}
+
+void TableWebServer::handleTiltBtScan() {
+    sendCorsHeaders();
+    std::vector<BleDiscoveredDevice> list = tableBleClient.scanDevices(3);
+    JsonDocument doc;
+    doc["status"] = "ok";
+    JsonArray arr = doc["devices"].to<JsonArray>();
+    for (const auto& dev : list) {
+        JsonObject o = arr.add<JsonObject>();
+        o["name"] = dev.name;
+        o["address"] = dev.address;
+        o["rssi"] = dev.rssi;
+    }
+    String res;
+    serializeJson(doc, res);
+    server.send(200, "application/json", res);
+}
+
+void TableWebServer::handleTiltBtConnect() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    if (server.hasArg("plain")) {
+        deserializeJson(doc, server.arg("plain"));
+    }
+    String address = doc["address"] | "";
+    bool autoConn = doc["auto_connect"] | true;
+    tableBleClient.setAutoConnect(autoConn);
+    bool ok = true;
+    if (address.length() > 0) {
+        ok = tableBleClient.connectTo(address);
+    } else if (doc["disconnect"] | false) {
+        tableBleClient.disconnect();
+    }
+    JsonDocument resp;
+    resp["status"] = ok ? "ok" : "error";
+    resp["message"] = ok ? "Команда з'єднання виконана" : "Не вдалося з'єднатися";
+    String res;
+    serializeJson(resp, res);
+    server.send(ok ? 200 : 502, "application/json", res);
 }

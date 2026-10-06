@@ -31,12 +31,28 @@ private:
     void handleAutomaticStop();
     void handleOtaLatest();
     void handleOtaUpdate();
+    void handleTiltOtaLatest();
+    void handleTiltOtaUpdate();
 
     // Налаштування Wi-Fi
     void handleWiFiConfig();
     void handleWiFiScan();
     void handleWiFiSave();
     void handleWiFiReset();
+
+    // Керування та налаштування платформи нахилу (через Bluetooth)
+    void handleTiltStatus();
+    void handleTiltMove();
+    void handleTiltHome();
+    void handleTiltStop();
+    void handleTiltZero();
+    void handleTiltGyroZero();
+    void handleTiltGyroCalibrate();
+    void handleTiltHold();
+    void handleTiltGetSettings();
+    void handleTiltSaveSettings();
+    void handleTiltBtScan();
+    void handleTiltBtConnect();
 
     void handleNotFound();
     void handleOptions();

@@ -372,6 +372,33 @@
                                                       "description":  "Завантажує та встановлює останній BIN-реліз. Потрібне підключення ESP32 до роутера з доступом до Інтернету.",
                                                       "url":  "{{baseUrl}}/api/ota/update"
                                                   }
+                                  },
+                                  {
+                                      "name":  "Перевірити реліз плати нахилу",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [ ],
+                                                      "description":  "Перевіряє asset tilt_platform.bin та повертає версію slave, якщо він підключений через BLE.",
+                                                      "url":  "{{baseUrl}}/api/ota/tilt/latest"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Оновити плату нахилу через BLE",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}"
+                                                               },
+                                                      "description":  "Завантажує tilt_platform.bin з останнього релізу та передає його на slave через BLE. Потрібні Wi-Fi/Інтернет на master і з'єднання BLE зі slave.",
+                                                      "url":  "{{baseUrl}}/api/ota/tilt/update"
+                                                  }
                                   }
                               ]
                  }

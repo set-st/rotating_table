@@ -5,6 +5,7 @@
 #include "web_server.h"
 #include "imu_sensor.h"
 #include "ota_updater.h"
+#include "table_ble_client.h"
 
 void setup() {
     Serial.begin(115200);
@@ -22,14 +23,18 @@ void setup() {
     if (!imuSensor.begin()) {
         Serial.println("[Error] Помилка ініціалізації GY-87/MPU6050!");
     }
-    // 2. Налаштування мережі Wi-Fi (зчитування NVS або fallback на config.h, mDNS)
+
+    // 2. Ініціалізація Bluetooth зв'язку з платформою нахилу
+    tableBleClient.begin();
+
+    // 3. Налаштування мережі Wi-Fi (зчитування NVS або fallback на config.h, mDNS)
     wifiMgr.begin();
     wifiMgr.setupWiFi();
 
-    // 3. Запуск веб-сервера
+    // 4. Запуск веб-сервера
     webServer.begin();
 
-    // 4. Автоматичний пошук кінцевика при старті, якщо увімкнено у налаштуваннях
+    // 5. Автоматичний пошук кінцевика при старті, якщо увімкнено у налаштуваннях
     if (motionCtrl.getConfig().autoHomeOnBoot) {
         Serial.println("[Boot] Запуск автоматичного калібрування нуля при старті...");
         motionCtrl.startHoming();
@@ -42,6 +47,9 @@ void loop() {
     // Обробка вхідних HTTP-запитів
     webServer.handleClient();
     imuSensor.update();
+
+    // Оновлення Bluetooth зв'язку з платформою нахилу
+    tableBleClient.update();
 
     // Обробка запланованого відкладеного перезавантаження після зміни налаштувань
     wifiMgr.handle();
