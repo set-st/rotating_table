@@ -5,6 +5,7 @@
 #include <Update.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_ota_ops.h>
 #include "table_ble_client.h"
 
 OtaUpdater otaUpdater;
@@ -104,7 +105,16 @@ bool OtaUpdater::installLatestRelease(String& error) {
         return false;
     }
     if (!Update.begin(static_cast<size_t>(contentLength))) {
-        error = "Недостатньо місця для OTA-оновлення";
+        const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
+        if (nextPartition && static_cast<size_t>(contentLength) > nextPartition->size) {
+            error = "Прошивка (" + String(contentLength) + " байт) більша за доступний "
+                    "OTA-розділ (" + String(nextPartition->size) +
+                    " байт). Для переходу з v1.0.6 потрібне одноразове прошивання "
+                    "основної плати через USB з новою таблицею розділів.";
+        } else {
+            error = "Не вдалося розпочати OTA-оновлення: " +
+                    String(Update.errorString());
+        }
         http.end();
         return false;
     }
