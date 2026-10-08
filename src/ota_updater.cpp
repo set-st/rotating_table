@@ -176,11 +176,19 @@ bool OtaUpdater::installTiltLatestRelease(TableBleClient& bleClient,
         http.end();
         return false;
     }
-    if (!bleClient.beginTiltOta(static_cast<size_t>(contentLength))) {
-        error = "Slave відхилив початок OTA-передачі";
+    String slaveStatus;
+    Serial.printf("[BLE OTA] Початок OTA для slave: size=%d байт\n", contentLength);
+    if (!bleClient.beginTiltOta(static_cast<size_t>(contentLength), &slaveStatus)) {
+        if (slaveStatus.length() > 0 && slaveStatus != "") {
+            error = "Slave відхилив початок OTA-передачі: " + slaveStatus;
+        } else {
+            error = "Slave відхилив початок OTA-передачі";
+        }
+        Serial.printf("[BLE OTA] Slave відповів на BEGIN: '%s'\n", slaveStatus.c_str());
         http.end();
         return false;
     }
+    Serial.printf("[BLE OTA] Slave прийняв BEGIN: '%s'\n", slaveStatus.c_str());
 
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buffer[512];
@@ -196,6 +204,10 @@ bool OtaUpdater::installTiltLatestRelease(TableBleClient& bleClient,
             success = false;
             error = "BLE OTA-передача перервалася на " +
                     String(static_cast<unsigned int>(transferred)) + " байтах";
+            Serial.printf("[BLE OTA] Передача перервалася: transferred=%u, remaining=%u, request=%u\n",
+                          static_cast<unsigned int>(transferred),
+                          static_cast<unsigned int>(remaining),
+                          static_cast<unsigned int>(requestSize));
             break;
         }
         transferred += received;
@@ -205,9 +217,11 @@ bool OtaUpdater::installTiltLatestRelease(TableBleClient& bleClient,
     http.end();
 
     if (success) {
+        Serial.println("[BLE OTA] Відправка даних завершена. Очікуємо FINISH...");
         success = bleClient.finishTiltOta();
         if (!success) {
             error = "Slave не підтвердив завершення запису прошивки";
+            Serial.println("[BLE OTA] Slave не підтвердив FINISH");
         }
     }
     if (!success) {

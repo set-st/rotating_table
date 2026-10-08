@@ -273,19 +273,29 @@ size_t TableBleClient::getOtaChunkSize() {
                    : 0;
 }
 
-bool TableBleClient::beginTiltOta(size_t firmwareSize) {
+bool TableBleClient::beginTiltOta(size_t firmwareSize, String* outStatus) {
     if (!connected || !pOtaControlChar || !pOtaDataChar ||
         firmwareSize == 0 || firmwareSize > UINT32_MAX) {
+        if (outStatus) {
+            *outStatus = "Плата нахилу не підключена або OTA-канал недоступний";
+        }
         return false;
     }
     NimBLERemoteCharacteristic* control =
         static_cast<NimBLERemoteCharacteristic*>(pOtaControlChar);
     const String command = "BEGIN:" + String(static_cast<uint32_t>(firmwareSize));
     if (!control->writeValue(command.c_str(), true)) {
+        if (outStatus) {
+            *outStatus = "Не вдалося надіслати команду BEGIN на плату нахилу";
+        }
         return false;
     }
     const std::string response = control->readValue();
-    return response == "READY";
+    const String status = response.empty() ? "" : String(response.c_str());
+    if (outStatus) {
+        *outStatus = status;
+    }
+    return status == "READY";
 }
 
 bool TableBleClient::writeTiltOtaChunk(const uint8_t* data, size_t length) {
@@ -389,7 +399,8 @@ std::vector<BleDiscoveredDevice> TableBleClient::scanDevices(uint32_t durationSe
     for (int i = 0; i < results.getCount(); ++i) {
         NimBLEAdvertisedDevice dev = results.getDevice(i);
         BleDiscoveredDevice d;
-        d.name = String(dev.getName().c_str());
+        const std::string devName = dev.getName();
+        d.name = devName.empty() ? String(TILT_DEFAULT_DEVICE_NAME) : String(devName.c_str());
         d.address = String(dev.getAddress().toString().c_str());
         d.rssi = dev.getRSSI();
         Serial.printf("[Table BLE Client] Scan result: %s (%s, RSSI %d)\n",

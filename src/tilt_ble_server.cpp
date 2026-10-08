@@ -90,6 +90,7 @@ bool TiltBleServer::begin(const char* deviceName) {
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEDevice::setSecurityPasskey(TILT_BLE_PAIR_PASSKEY);
     NimBLEDevice::init(deviceName);
+    NimBLEDevice::setDeviceName(deviceName);
     NimBLEDevice::setMTU(517);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Максимальна потужність сигналу
 
@@ -169,7 +170,9 @@ void TiltBleServer::processOtaControl(const std::string& payload) {
         tiltCtrl.emergencyStop();
         tiltCtrl.setDriverEnabled(false);
         if (!Update.begin(size, U_FLASH)) {
-            setOtaStatus("ERROR:update begin");
+            const uint8_t err = Update.getError();
+            setOtaStatus("ERROR:update begin (" + String(err) + ")");
+            Serial.printf("[Tilt OTA] Відхилено початок OTA: Update.begin() failed, err=%u\n", err);
             return;
         }
 

@@ -21,7 +21,7 @@ public:
     int getRssi() const;
     TiltStatus getStatus();
     size_t getOtaChunkSize();
-    bool beginTiltOta(size_t firmwareSize);
+    bool beginTiltOta(size_t firmwareSize, String* outStatus = nullptr);
     bool writeTiltOtaChunk(const uint8_t* data, size_t length);
     bool finishTiltOta();
     void abortTiltOta();
