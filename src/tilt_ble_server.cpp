@@ -10,6 +10,10 @@ class TiltServerCallbacks : public NimBLEServerCallbacks {
     TiltBleServer* parent;
 public:
     TiltServerCallbacks(TiltBleServer* p) : parent(p) {}
+    uint32_t onPassKeyRequest() override {
+        Serial.printf("[Tilt BLE] Запит PIN-коду: %06u\n", TILT_BLE_PAIR_PASSKEY);
+        return TILT_BLE_PAIR_PASSKEY;
+    }
     void onConnect(NimBLEServer* pServer) override {
         parent->deviceConnected = true;
         Serial.println("[Tilt BLE] Центральний пристрій підключено.");
@@ -82,9 +86,16 @@ TiltBleServer::TiltBleServer()
       otaReceivedBytes(0), otaRestartAt(0) {}
 
 bool TiltBleServer::begin(const char* deviceName) {
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+    NimBLEDevice::setSecurityPasskey(TILT_BLE_PAIR_PASSKEY);
     NimBLEDevice::init(deviceName);
     NimBLEDevice::setMTU(517);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Максимальна потужність сигналу
+
+    const std::string addr = NimBLEDevice::getAddress().toString();
+    Serial.printf("[Tilt BLE] MAC: %s | Common BLE passkey: %06u\n",
+                  addr.c_str(), TILT_BLE_PAIR_PASSKEY);
 
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new TiltServerCallbacks(this));
@@ -128,8 +139,10 @@ bool TiltBleServer::begin(const char* deviceName) {
 
     // Запуск реклами BLE для виявлення основною платою
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setName(deviceName);
     pAdvertising->addServiceUUID(TILT_BLE_SERVICE_UUID);
     pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);
     pAdvertising->start();
 
     Serial.printf("[Tilt BLE] BLE Сервер запущено. Ім'я пристрою: '%s'\n", deviceName);

@@ -10,6 +10,10 @@ class TableBleClientCallbacks : public NimBLEClientCallbacks {
     TableBleClient* parent;
 public:
     TableBleClientCallbacks(TableBleClient* p) : parent(p) {}
+    uint32_t onPassKeyRequest() override {
+        Serial.printf("[Table BLE Client] BLE passkey request: %06u\n", TILT_BLE_PAIR_PASSKEY);
+        return TILT_BLE_PAIR_PASSKEY;
+    }
     void onConnect(NimBLEClient* pClient) override {
         Serial.println("[Table BLE Client] З'єднання з платформою нахилу встановлено.");
     }
@@ -58,9 +62,14 @@ void TableBleClient::saveNvs() {
 
 bool TableBleClient::begin() {
     loadNvs();
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+    NimBLEDevice::setSecurityPasskey(TILT_BLE_PAIR_PASSKEY);
     NimBLEDevice::init("RotatingTable-Client");
     NimBLEDevice::setMTU(517);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    Serial.printf("[Table BLE Client] MAC: %s | Common BLE passkey: %06u\n",
+                  NimBLEDevice::getAddress().toString().c_str(), TILT_BLE_PAIR_PASSKEY);
     Serial.println("[Table BLE Client] BLE клієнт ініціалізовано.");
     return true;
 }
@@ -120,6 +129,10 @@ bool TableBleClient::connectInternal(const String& address) {
         Serial.println("[Table BLE Client] Помилка з'єднання з BLE пристроєм.");
         connecting = false;
         return false;
+    }
+
+    if (!client->secureConnection()) {
+        Serial.println("[Table BLE Client] Попередження: secureConnection() не виконався, продовжуємо без збору ключа.");
     }
 
     NimBLERemoteService* pSvc = client->getService(NimBLEUUID(TILT_BLE_SERVICE_UUID));
@@ -368,14 +381,19 @@ std::vector<BleDiscoveredDevice> TableBleClient::scanDevices(uint32_t durationSe
     std::vector<BleDiscoveredDevice> list;
     NimBLEScan* pScan = NimBLEDevice::getScan();
     pScan->setActiveScan(true);
+    pScan->setInterval(45);
+    pScan->setWindow(15);
+    pScan->setDuplicateFilter(false);
     NimBLEScanResults results = pScan->start(durationSec, false);
 
     for (int i = 0; i < results.getCount(); ++i) {
         NimBLEAdvertisedDevice dev = results.getDevice(i);
         BleDiscoveredDevice d;
-        d.name = dev.getName().c_str();
-        d.address = dev.getAddress().toString().c_str();
+        d.name = String(dev.getName().c_str());
+        d.address = String(dev.getAddress().toString().c_str());
         d.rssi = dev.getRSSI();
+        Serial.printf("[Table BLE Client] Scan result: %s (%s, RSSI %d)\n",
+                      d.name.c_str(), d.address.c_str(), d.rssi);
         list.push_back(d);
     }
     pScan->clearResults();
