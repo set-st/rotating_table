@@ -67,7 +67,10 @@ bool TableBleClient::begin() {
     NimBLEDevice::setSecurityPasskey(TILT_BLE_PAIR_PASSKEY);
     NimBLEDevice::init("RotatingTable-Client");
     NimBLEDevice::setMTU(517);
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    // ESP32 BLE and WiFi share the same radio. Using maximum BLE TX power causes
+    // strong interference and degrades WiFi stability on the same board. Keep BLE
+    // at a moderate level for stable coexistence with the WiFi stack.
+    NimBLEDevice::setPower(ESP_PWR_LVL_P7);
     Serial.printf("[Table BLE Client] MAC: %s | Common BLE passkey: %06u\n",
                   NimBLEDevice::getAddress().toString().c_str(), TILT_BLE_PAIR_PASSKEY);
     Serial.println("[Table BLE Client] BLE клієнт ініціалізовано.");
@@ -106,14 +109,17 @@ bool TableBleClient::connectInternal(const String& address) {
         bool found = false;
         for (int i = 0; i < results.getCount(); ++i) {
             NimBLEAdvertisedDevice dev = results.getDevice(i);
-            if (dev.isAdvertisingService(NimBLEUUID(TILT_BLE_SERVICE_UUID)) ||
-                dev.getName() == TILT_DEFAULT_DEVICE_NAME) {
+            const std::string devName = dev.getName();
+            const String advertisedName = devName.empty() ? String(TILT_DEFAULT_DEVICE_NAME) : String(devName.c_str());
+            const bool isTiltDevice = dev.isAdvertisingService(NimBLEUUID(TILT_BLE_SERVICE_UUID)) ||
+                                      advertisedName.startsWith(TILT_DEFAULT_DEVICE_NAME);
+            if (isTiltDevice) {
                 bleAddr = dev.getAddress();
                 targetAddress = String(bleAddr.toString().c_str());
                 saveNvs();
                 found = true;
                 Serial.printf("[Table BLE Client] Знайдено TiltTable: %s (%s, RSSI %d)\n",
-                              dev.getName().c_str(), targetAddress.c_str(), dev.getRSSI());
+                              advertisedName.c_str(), targetAddress.c_str(), dev.getRSSI());
                 break;
             }
         }

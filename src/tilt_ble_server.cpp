@@ -85,18 +85,41 @@ TiltBleServer::TiltBleServer()
       otaStatus("IDLE"), otaInProgress(false), otaExpectedBytes(0),
       otaReceivedBytes(0), otaRestartAt(0) {}
 
+namespace {
+String buildUniqueTiltAdvertisedName(const char* baseName, const String& macAddress) {
+    String name = baseName ? String(baseName) : String(TILT_DEFAULT_DEVICE_NAME);
+    if (name.length() == 0 || (baseName && strcmp(baseName, TILT_DEFAULT_DEVICE_NAME) == 0) ||
+        (!baseName && name == TILT_DEFAULT_DEVICE_NAME) ||
+        (baseName == nullptr && name.length() == 0)) {
+        String macNoColons = macAddress;
+        macNoColons.replace(":", "");
+        String suffix = macNoColons.substring(macNoColons.length() > 6 ? macNoColons.length() - 6 : 0);
+        if (suffix.length() > 0 && !name.endsWith("-" + suffix)) {
+            name += "-" + suffix;
+        }
+    }
+    return name;
+}
+}
+
 bool TiltBleServer::begin(const char* deviceName) {
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEDevice::setSecurityPasskey(TILT_BLE_PAIR_PASSKEY);
-    NimBLEDevice::init(deviceName);
-    NimBLEDevice::setDeviceName(deviceName);
+    NimBLEDevice::init(deviceName ? deviceName : TILT_DEFAULT_DEVICE_NAME);
+
+    String macAddress = NimBLEDevice::getAddress().toString().c_str();
+    String advertisedName = buildUniqueTiltAdvertisedName(deviceName, macAddress);
+    NimBLEDevice::setDeviceName(advertisedName.c_str());
     NimBLEDevice::setMTU(517);
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Максимальна потужність сигналу
+    // The main board uses WiFi concurrently with BLE on the same ESP32 radio.
+    // Keep the tilt board at a moderate BLE TX power to reduce radio interference
+    // and improve WiFi stability on the main controller while preserving pairing.
+    NimBLEDevice::setPower(ESP_PWR_LVL_P7);
 
     const std::string addr = NimBLEDevice::getAddress().toString();
-    Serial.printf("[Tilt BLE] MAC: %s | Common BLE passkey: %06u\n",
-                  addr.c_str(), TILT_BLE_PAIR_PASSKEY);
+    Serial.printf("[Tilt BLE] MAC: %s | BLE name: %s | Common BLE passkey: %06u\n",
+                  addr.c_str(), advertisedName.c_str(), TILT_BLE_PAIR_PASSKEY);
 
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new TiltServerCallbacks(this));
@@ -140,13 +163,13 @@ bool TiltBleServer::begin(const char* deviceName) {
 
     // Запуск реклами BLE для виявлення основною платою
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->setName(deviceName);
+    pAdvertising->setName(advertisedName.c_str());
     pAdvertising->addServiceUUID(TILT_BLE_SERVICE_UUID);
     pAdvertising->setScanResponse(true);
     pAdvertising->setMinPreferred(0x06);
     pAdvertising->start();
 
-    Serial.printf("[Tilt BLE] BLE Сервер запущено. Ім'я пристрою: '%s'\n", deviceName);
+    Serial.printf("[Tilt BLE] BLE Сервер запущено. Ім'я пристрою: '%s'\n", advertisedName.c_str());
     sendSettingsNotification();
     return true;
 }
