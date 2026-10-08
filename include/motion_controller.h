@@ -56,9 +56,10 @@ struct HardwareConfig {
     float microsteps;   // Мікрокрок драйвера (1, 2, 4, 8, 16, 32...)
 
     // Швидкість та прискорення
-    float defaultSpeed; // Стандартна швидкість (град/с)
-    float maxSpeed;     // Максимальна швидкість (град/с)
-    float acceleration; // Прискорення (град/с^2)
+    float defaultSpeed;      // Стандартна швидкість (град/с)
+    float maxSpeed;          // Максимальна швидкість (град/с)
+    float acceleration;      // Прискорення (град/с^2)
+    float stopDeceleration;  // Пригальмовування перед зупинкою (град/с^2)
 
     // Керування апаратними кнопками
     float buttonMoveSpeed;

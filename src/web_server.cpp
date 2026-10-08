@@ -469,6 +469,7 @@ void TableWebServer::handleGetSettings() {
     doc["default_speed"] = cfg.defaultSpeed;
     doc["max_speed"] = cfg.maxSpeed;
     doc["acceleration"] = cfg.acceleration;
+    doc["stop_deceleration"] = cfg.stopDeceleration;
     doc["button_move_speed"] = cfg.buttonMoveSpeed;
     doc["button_move_angle"] = cfg.buttonMoveAngle;
 
@@ -542,10 +543,12 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["default_speed"].is<float>()) cfg.defaultSpeed = reqDoc["default_speed"].as<float>();
     if (reqDoc["max_speed"].is<float>()) cfg.maxSpeed = reqDoc["max_speed"].as<float>();
     if (reqDoc["acceleration"].is<float>()) cfg.acceleration = reqDoc["acceleration"].as<float>();
+    if (reqDoc["stop_deceleration"].is<float>()) cfg.stopDeceleration = reqDoc["stop_deceleration"].as<float>();
     if (reqDoc["button_move_speed"].is<float>()) cfg.buttonMoveSpeed = reqDoc["button_move_speed"].as<float>();
     if (reqDoc["button_move_angle"].is<float>()) cfg.buttonMoveAngle = reqDoc["button_move_angle"].as<float>();
 
     if (cfg.buttonMoveSpeed <= 0.0f || cfg.buttonMoveAngle <= 0.0f ||
+        cfg.stopDeceleration <= 0.0f ||
         cfg.homingFastSpeed <= 0.0f || cfg.homingBackoffSpeed <= 0.0f ||
         cfg.homingSlowSpeed <= 0.0f || cfg.homingFastSpeed > cfg.maxSpeed ||
         cfg.homingBackoffSpeed > cfg.maxSpeed ||

@@ -1,7 +1,16 @@
 #include "motion_controller.h"
 #include <Preferences.h>
+#include <cmath>
 
 static const char *NVS_HW_NAMESPACE = "table_hw";
+
+static float brakingDistanceDeg(float speedDegS, float stopDecelDegS2) {
+  if (!std::isfinite(speedDegS) || speedDegS <= 0.0f ||
+      !std::isfinite(stopDecelDegS2) || stopDecelDegS2 <= 0.0f) {
+    return 0.0f;
+  }
+  return (speedDegS * speedDegS) / (2.0f * stopDecelDegS2);
+}
 
 MotionController motionCtrl;
 
@@ -44,6 +53,7 @@ MotionController::MotionController()
   cfg.defaultSpeed = DEFAULT_SPEED_DEG_S;
   cfg.maxSpeed = MAX_SPEED_DEG_S;
   cfg.acceleration = DEFAULT_ACCEL_DEG_S2;
+  cfg.stopDeceleration = DEFAULT_STOP_DECEL_DEG_S2;
   cfg.buttonMoveSpeed = BUTTON_MOVE_SPEED_DEG_S;
   cfg.buttonMoveAngle = BUTTON_MOVE_ANGLE_DEG;
 
@@ -97,6 +107,8 @@ void MotionController::loadConfig() {
     cfg.defaultSpeed = prefs.getFloat("def_spd", DEFAULT_SPEED_DEG_S);
     cfg.maxSpeed = prefs.getFloat("max_spd", MAX_SPEED_DEG_S);
     cfg.acceleration = prefs.getFloat("accel", DEFAULT_ACCEL_DEG_S2);
+    cfg.stopDeceleration =
+        prefs.getFloat("stop_dec", DEFAULT_STOP_DECEL_DEG_S2);
     cfg.buttonMoveSpeed =
         prefs.getFloat("btn_spd", BUTTON_MOVE_SPEED_DEG_S);
     cfg.buttonMoveAngle =
@@ -147,6 +159,7 @@ void MotionController::saveConfig() {
     prefs.putFloat("def_spd", cfg.defaultSpeed);
     prefs.putFloat("max_spd", cfg.maxSpeed);
     prefs.putFloat("accel", cfg.acceleration);
+    prefs.putFloat("stop_dec", cfg.stopDeceleration);
     prefs.putFloat("btn_spd", cfg.buttonMoveSpeed);
     prefs.putFloat("btn_ang", cfg.buttonMoveAngle);
 
@@ -165,6 +178,10 @@ void MotionController::applyKinematics() {
   currentStepsPerDegree = cfg.getStepsPerDegree();
   if (currentStepsPerDegree <= 0.0f) {
     currentStepsPerDegree = 1.0f;
+  }
+  if (cfg.stopDeceleration <= 0.0f) {
+    cfg.stopDeceleration = cfg.acceleration > 0.0f ? cfg.acceleration
+                                                : DEFAULT_STOP_DECEL_DEG_S2;
   }
 
   stepper.setPinsInverted(!cfg.dirPositiveHigh, cfg.stepActiveLow, false);
@@ -565,6 +582,21 @@ void MotionController::motionLoop() {
       }
     }
     if (state == STATE_MOVING) {
+      const float currentSpeedDegS =
+          fabsf((float)stepper.speed() / currentStepsPerDegree);
+      const float remainingDeg =
+          fabsf(stepsToDeg(stepper.distanceToGo()));
+      const float brakeDistanceDeg =
+          brakingDistanceDeg(currentSpeedDegS, cfg.stopDeceleration);
+
+      if (remainingDeg > 0.0f &&
+          remainingDeg <= brakeDistanceDeg &&
+          brakeDistanceDeg > 0.0f) {
+        stepper.setAcceleration(cfg.stopDeceleration * currentStepsPerDegree);
+      } else {
+        stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
+      }
+
       stepper.run();
       if (stepper.distanceToGo() == 0) {
         setState(STATE_IDLE);

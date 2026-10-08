@@ -963,6 +963,10 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <label for="inputAccel">Прискорення (°/с²):</label>
           <input type="number" id="inputAccel" value="90" min="10" max="1000">
         </div>
+        <div class="form-group">
+          <label for="inputStopDecel">Пригальмовування перед стопом (°/с²):</label>
+          <input type="number" id="inputStopDecel" value="60" min="1" max="1000">
+        </div>
 
         <!-- 3. Кінцевик та калібрування -->
         <div class="section-title" style="margin-top: 14px;">Кінцевик та калібрування (Homing)</div>
@@ -1435,6 +1439,7 @@ POST /api/wifi/reset</pre>
       document.getElementById('inputMaxSpeed').value = res.max_speed ?? 180;
       updateSpeedSliderLimit(document.getElementById('inputMaxSpeed').value);
       document.getElementById('inputAccel').value = res.acceleration ?? 90;
+      document.getElementById('inputStopDecel').value = res.stop_deceleration ?? 60;
 
       document.getElementById('chkEndstopInvert').checked = !!res.endstop_inverted;
       document.getElementById('chkBootHome').checked = !!res.auto_home_on_boot;
@@ -1478,6 +1483,7 @@ POST /api/wifi/reset</pre>
         default_speed: parseFloat(document.getElementById('inputDefSpeed').value),
         max_speed: parseFloat(document.getElementById('inputMaxSpeed').value),
         acceleration: parseFloat(document.getElementById('inputAccel').value),
+        stop_deceleration: parseFloat(document.getElementById('inputStopDecel').value),
 
         endstop_inverted: document.getElementById('chkEndstopInvert').checked,
         auto_home_on_boot: document.getElementById('chkBootHome').checked,

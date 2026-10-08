@@ -259,7 +259,8 @@ curl -X POST http://rotating-table.local/api/home -H "Content-Type: application/
     "rotation_limit_deg": 180,
     "dir_positive_high": true,
     "step_active_low": false,
-    "enable_active_high": false
+    "enable_active_high": false,
+    "stop_deceleration": 60.0
   }
   ```
 
@@ -278,7 +279,8 @@ curl -X POST http://rotating-table.local/api/home -H "Content-Type: application/
     "rotation_limit_deg": 180,
     "dir_positive_high": true,
     "step_active_low": false,
-    "enable_active_high": false
+    "enable_active_high": false,
+    "stop_deceleration": 60.0
   }
   ```
 

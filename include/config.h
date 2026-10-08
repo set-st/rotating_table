@@ -70,6 +70,8 @@ constexpr float DEFAULT_SPEED_DEG_S =
 constexpr float MAX_SPEED_DEG_S =
     30.0f; // Максимально допустима швидкість у град/с
 constexpr float DEFAULT_ACCEL_DEG_S2 = 15.0f; // Прискорення у град/с^2
+constexpr float DEFAULT_STOP_DECEL_DEG_S2 =
+    60.0f; // Пригальмовування перед зупинкою у град/с^2
 
 // =============================================================================
 // КАЛІБРУВАННЯ ТА ПОШУК КІНЦЕВИКА (HOMING)

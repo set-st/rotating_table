@@ -72,6 +72,7 @@ class SimulatorState:
             "auto_home_on_boot": False,
             "max_speed": 180.0,
             "acceleration": 90.0,
+            "stop_deceleration": 60.0,
             "default_move_speed": 30.0,
             "default_move_angle": 10.0,
             "homing_fast_speed": 25.0,
@@ -142,13 +143,26 @@ class SimulatorState:
             # 1. Оновлення поворотного столу
             if self.state == "MOVING":
                 delta = self.target_angle - self.current_angle
-                step = max(self.speed, 1.0) * 0.05
-                if abs(delta) <= step:
+                if abs(delta) <= 0.5:
                     self.current_angle = self.target_angle
                     self.speed = 0.0
                     self.state = "IDLE"
                 else:
+                    max_speed = float(self.settings.get("max_speed", 180.0))
+                    stop_deceleration = max(float(self.settings.get("stop_deceleration", 60.0)), 1.0)
+                    current_speed = max(abs(self.speed), 0.1)
+                    limited_speed = min(current_speed, max_speed)
+                    braking_distance = (limited_speed ** 2) / (2.0 * stop_deceleration)
+                    if abs(delta) <= braking_distance + 1.0:
+                        limited_speed = max(0.1, limited_speed - stop_deceleration * 0.05)
+                    self.speed = limited_speed if delta > 0 else -limited_speed
+                    step = limited_speed * 0.05
+                    step = min(step, abs(delta))
                     self.current_angle += step if delta > 0 else -step
+                    if abs(self.target_angle - self.current_angle) <= 0.5:
+                        self.current_angle = self.target_angle
+                        self.speed = 0.0
+                        self.state = "IDLE"
             if self.automatic_enabled and self.state == "IDLE" and now >= self.next_automatic_at:
                 next_angle = self.current_angle + self.automatic_angle
                 if self.is_homed:
