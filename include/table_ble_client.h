@@ -49,6 +49,7 @@ private:
     bool connected;
     bool connecting;
     bool autoConnectEnabled;
+    uint8_t autoConnectAttempts;
     String targetAddress;
     int lastRssi;
 

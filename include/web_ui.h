@@ -637,9 +637,14 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             <label for="inputTiltMac">MAC-адреса або ім'я плати:</label>
             <input type="text" id="inputTiltMac" placeholder="XX:XX:XX:XX:XX:XX або TiltTable-ESP32">
           </div>
-          <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 24px;">
-            <input type="checkbox" id="chkTiltAutoConnect" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="chkTiltAutoConnect" style="margin-bottom: 0; cursor: pointer;">Автоматичне перепідключення</label>
+          <div class="form-group" style="display: flex; flex-direction: column; justify-content: center; gap: 8px; margin-top: 24px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="chkTiltAutoConnect" checked style="width: 20px; height: 20px; cursor: pointer;">
+              <label for="chkTiltAutoConnect" style="margin-bottom: 0; cursor: pointer;">Автоматичне перепідключення</label>
+            </div>
+            <div id="tiltAutoConnectHint" class="info-box" style="margin: 0; font-size: 0.78rem; line-height: 1.4;">
+              Увімкнено. Після 2 невдалих спроб авто-підключення вимикається і працює лише ручне підключення.
+            </div>
           </div>
         </div>
 
@@ -1294,6 +1299,17 @@ POST /api/wifi/reset</pre>
       input.type = (input.type === 'password') ? 'text' : 'password';
     }
 
+    function updateTiltAutoConnectHint(enabled) {
+      const hint = document.getElementById('tiltAutoConnectHint');
+      const cb = document.getElementById('chkTiltAutoConnect');
+      if (!hint || !cb) return;
+      cb.checked = enabled;
+      hint.textContent = enabled
+        ? 'Увімкнено. Після 2 невдалих спроб авто-підключення вимикається і працює лише ручне підключення.'
+        : 'Вимкнено. Підключення виконується вручну через MAC або ім\'я пристрою.';
+      hint.style.borderColor = enabled ? 'var(--primary)' : 'var(--border)';
+    }
+
     async function apiCall(endpoint, data = null) {
       try {
         const opts = {
@@ -1902,6 +1918,7 @@ POST /api/wifi/reset</pre>
     async function connectTiltBt() {
       const mac = document.getElementById('inputTiltMac').value.trim();
       const autoConn = document.getElementById('chkTiltAutoConnect').checked;
+      updateTiltAutoConnectHint(autoConn);
       toast('Підключення до плати нахилу через Bluetooth...');
       const res = await apiCall('/api/tilt/bt/connect', { address: mac, auto_connect: autoConn });
       if (res && res.status === 'ok') {
@@ -1912,6 +1929,7 @@ POST /api/wifi/reset</pre>
     }
 
     async function disconnectTiltBt() {
+      updateTiltAutoConnectHint(false);
       toast('Відключення від плати нахилу...');
       await apiCall('/api/tilt/bt/connect', { disconnect: true, auto_connect: false });
       toast('Відключено.');

@@ -135,6 +135,7 @@ private:
 
     volatile MotionState state;
     volatile bool isHomed;
+    volatile float currentAngleDeg;
     volatile float targetAngleDeg;
     volatile float requestedSpeedDegS;
     char lastError[64];

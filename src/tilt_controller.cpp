@@ -10,8 +10,8 @@ TiltController::TiltController()
       motionTaskHandle(nullptr), mutex(nullptr),
       currentStepsPerDegree(1.0f),
       state(TILT_STATE_IDLE), isHomed(false),
-      targetAngleDeg(0.0f), requestedSpeedDegS(0.0f),
-      holdActive(false), holdTargetDeg(0.0f),
+      currentAngleDeg(0.0f), targetAngleDeg(0.0f),
+      requestedSpeedDegS(0.0f), holdActive(false), holdTargetDeg(0.0f),
       endstopTriggerStartTime(0),
       homingStep(THOME_FAST), homingStartTime(0) {
     memset(lastError, 0, sizeof(lastError));
@@ -225,11 +225,13 @@ bool TiltController::moveTo(float angleDeg, float speedDegS, bool relative) {
 
     holdActive = false; // Звичайний рух вимикає активне утримання за гіроскопом
 
-    float finalAngle = relative ? (stepsToDeg(stepper.currentPosition()) + angleDeg) : angleDeg;
+    const float baseAngle = isHomed ? currentAngleDeg : 0.0f;
+    float finalAngle = relative ? (baseAngle + angleDeg) : angleDeg;
 
     // Обмеження допустимих кутів нахилу
     finalAngle = constrain(finalAngle, cfg.minAngle, cfg.maxAngle);
 
+    currentAngleDeg = finalAngle;
     targetAngleDeg = finalAngle;
     requestedSpeedDegS = (speedDegS > 0.0f) ? min(speedDegS, cfg.maxSpeed) : cfg.defaultSpeed;
 
@@ -276,6 +278,7 @@ void TiltController::emergencyStop() {
 void TiltController::setZero() {
     if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         stepper.setCurrentPosition(0);
+        currentAngleDeg = 0.0f;
         targetAngleDeg = 0.0f;
         isHomed = true;
         setState(TILT_STATE_IDLE);
@@ -338,6 +341,8 @@ void TiltController::motionLoop() {
             case THOME_FAST:
                 if (endstopPressed) {
                     stepper.setCurrentPosition(0);
+                    currentAngleDeg = 0.0f;
+                    targetAngleDeg = 0.0f;
                     // Відкат від кінцевика у зворотному напрямку
                     homingStep = THOME_BACKOFF;
                     stepper.setMaxSpeed(cfg.homingSlowSpeed * currentStepsPerDegree);
@@ -362,6 +367,7 @@ void TiltController::motionLoop() {
                     stepper.stop();
                     // Встановлюємо координату як крайню точку або 0
                     stepper.setCurrentPosition(degToSteps(cfg.minAngle));
+                    currentAngleDeg = cfg.minAngle;
                     targetAngleDeg = cfg.minAngle;
                     isHomed = true;
                     homingStep = THOME_COMPLETE;
@@ -395,10 +401,13 @@ void TiltController::motionLoop() {
     if (state == TILT_STATE_MOVING) {
         stepper.run();
         if (stepper.distanceToGo() == 0) {
+            currentAngleDeg = stepsToDeg(stepper.currentPosition());
+            targetAngleDeg = currentAngleDeg;
             setState(TILT_STATE_IDLE);
         }
     } else if (state == TILT_STATE_HOLDING) {
         stepper.run();
+        currentAngleDeg = stepsToDeg(stepper.currentPosition());
     }
 
     xSemaphoreGive(mutex);
@@ -436,7 +445,7 @@ TiltStatus TiltController::getStatus() {
     if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         st.state = static_cast<int>(state);
         st.stateStr = tiltStateToString(state);
-        st.motorAngle = stepsToDeg(stepper.currentPosition());
+        st.motorAngle = currentAngleDeg;
         st.targetAngle = targetAngleDeg;
         st.currentSpeed = (currentStepsPerDegree > 0.0f) ? (fabs(stepper.speed()) / currentStepsPerDegree) : 0.0f;
         st.isHomed = isHomed;

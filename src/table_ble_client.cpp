@@ -30,7 +30,7 @@ public:
 
 TableBleClient::TableBleClient()
     : connected(false), connecting(false), autoConnectEnabled(true),
-      targetAddress(""), lastRssi(0), lastConnectAttemptMs(0),
+      autoConnectAttempts(0), targetAddress(""), lastRssi(0), lastConnectAttemptMs(0),
     pClient(nullptr), pCmdChar(nullptr), pStatusChar(nullptr), pSettingsChar(nullptr),
     pOtaControlChar(nullptr), pOtaDataChar(nullptr) {
     mutex = xSemaphoreCreateMutex();
@@ -230,6 +230,7 @@ void TableBleClient::update() {
     NimBLEClient* client = static_cast<NimBLEClient*>(pClient);
     if (client && client->isConnected()) {
         connected = true;
+        autoConnectAttempts = 0;
         // Періодично оновлюємо RSSI
         static uint32_t lastRssiCheck = 0;
         if (millis() - lastRssiCheck > 2000) {
@@ -238,9 +239,20 @@ void TableBleClient::update() {
         }
     } else {
         connected = false;
-        if (autoConnectEnabled && !connecting && millis() - lastConnectAttemptMs > 4000) {
+        if (autoConnectEnabled && !connecting && millis() - lastConnectAttemptMs > 4000 && autoConnectAttempts < 2) {
             lastConnectAttemptMs = millis();
-            connectInternal(targetAddress);
+            const bool ok = connectInternal(targetAddress);
+            if (!ok) {
+                autoConnectAttempts++;
+                Serial.printf("[Table BLE Client] Авто-підключення невдале (%u/2). Переводимо в ручний режим.\n",
+                              autoConnectAttempts);
+                if (autoConnectAttempts >= 2) {
+                    autoConnectEnabled = false;
+                    saveNvs();
+                }
+            } else {
+                autoConnectAttempts = 0;
+            }
         }
     }
 }
@@ -419,6 +431,8 @@ std::vector<BleDiscoveredDevice> TableBleClient::scanDevices(uint32_t durationSe
 
 bool TableBleClient::connectTo(const String& address) {
     targetAddress = address;
+    autoConnectAttempts = 0;
+    autoConnectEnabled = false;
     saveNvs();
     return connectInternal(address);
 }
@@ -433,5 +447,8 @@ void TableBleClient::disconnect() {
 
 void TableBleClient::setAutoConnect(bool enable) {
     autoConnectEnabled = enable;
+    if (enable) {
+        autoConnectAttempts = 0;
+    }
     saveNvs();
 }

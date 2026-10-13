@@ -18,7 +18,7 @@ MotionController::MotionController()
     : stepper(AccelStepper::DRIVER, PIN_STEP, PIN_DIR),
       motionTaskHandle(nullptr), mutex(nullptr),
       currentStepsPerDegree(STEPS_PER_DEGREE), state(STATE_IDLE),
-      isHomed(false), targetAngleDeg(0.0f),
+      isHomed(false), currentAngleDeg(0.0f), targetAngleDeg(0.0f),
       requestedSpeedDegS(DEFAULT_SPEED_DEG_S), endstopTriggerStartTime(0),
       previousButtonLeft(false), previousButtonRight(false),
       previousButtonStop(false), homingStep(HOME_FAST_APPROACH),
@@ -425,8 +425,9 @@ bool MotionController::moveTo(float angleDeg, float speedDegS, bool relative) {
   stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
 
   float requestedAngle = 0.0f;
+  const float baseAngle = isHomed ? currentAngleDeg : 0.0f;
   if (relative) {
-    requestedAngle = stepsToDeg(stepper.currentPosition()) + angleDeg;
+    requestedAngle = baseAngle + angleDeg;
   } else {
     requestedAngle = angleDeg;
   }
@@ -436,6 +437,7 @@ bool MotionController::moveTo(float angleDeg, float speedDegS, bool relative) {
         constrain(requestedAngle, -cfg.rotationLimitDeg, cfg.rotationLimitDeg);
   }
   const long targetSteps = degToSteps(requestedAngle);
+  currentAngleDeg = requestedAngle;
   targetAngleDeg = stepsToDeg(targetSteps);
   stepper.moveTo(targetSteps);
   setState(STATE_MOVING);
@@ -492,6 +494,7 @@ void MotionController::stopAutomatic() {
 void MotionController::setZero() {
   if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     stepper.setCurrentPosition(0);
+    currentAngleDeg = 0.0f;
     targetAngleDeg = 0.0f;
     isHomed = true;
     setState(STATE_IDLE);
@@ -506,7 +509,7 @@ MotionStatus MotionController::getStatus() {
 
   // Миттєве атомарне зчитування для плавного відображення в реальному часі
   s.state = state;
-  s.currentAngle = stepsToDeg(stepper.currentPosition());
+  s.currentAngle = currentAngleDeg;
   s.targetAngle = (state == STATE_MOVING) ? targetAngleDeg : s.currentAngle;
   s.currentSpeed = requestedSpeedDegS;
   s.isHomed = isHomed;
@@ -599,6 +602,8 @@ void MotionController::motionLoop() {
 
       stepper.run();
       if (stepper.distanceToGo() == 0) {
+        currentAngleDeg = stepsToDeg(stepper.currentPosition());
+        targetAngleDeg = currentAngleDeg;
         setState(STATE_IDLE);
         Serial.println("[Motion] Цільову позицію досягнуто.");
       }
@@ -627,6 +632,8 @@ void MotionController::motionLoop() {
       } else if (homingStep == HOME_BACKOFF) {
         stepper.run();
         if (stepper.distanceToGo() == 0) {
+          currentAngleDeg = 0.0f;
+          targetAngleDeg = 0.0f;
           homingStep = HOME_SLOW_APPROACH;
           Serial.println(
               "[Motion] Початок повільного точного підходу до кінцевика...");
@@ -635,6 +642,7 @@ void MotionController::motionLoop() {
         if (isEndstopPressed()) {
           stepper.stop();
           stepper.setCurrentPosition(0);
+          currentAngleDeg = 0.0f;
           targetAngleDeg = 0.0f;
           isHomed = true;
           setState(STATE_IDLE);
