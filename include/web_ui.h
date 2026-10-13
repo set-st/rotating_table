@@ -1017,8 +1017,8 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         </div>
         <div class="form-group">
           <label for="inputRotationLimit">Межа повороту від нуля в кожен бік (°):</label>
-          <input type="number" id="inputRotationLimit" value="180" min="1" max="360" step="1">
-          <small>Після Homing стіл рухатиметься в межах від −межі до +межі.</small>
+          <input type="number" id="inputRotationLimit" value="180" min="1" max="1080" step="1">
+          <small>Вкажіть межу від нуля в кожен бік: наприклад, 720° означає діапазон −720°…+720° (загальний хід 1440°). Доступно від 1° до 1080° в кожен бік. Обмеження діє після Homing.</small>
         </div>
 
         <!-- 4. Піни GPIO -->

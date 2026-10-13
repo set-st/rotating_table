@@ -391,6 +391,22 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.automatic_enabled = False
             self.send_json({"status": "ok"})
         elif path == "/api/settings":
+            if "rotation_limit_deg" in body:
+                limit = body["rotation_limit_deg"]
+                if (
+                    isinstance(limit, bool)
+                    or not isinstance(limit, (int, float))
+                    or not math.isfinite(limit)
+                    or not 1.0 <= limit <= 1080.0
+                ):
+                    self.send_json(
+                        {
+                            "status": "error",
+                            "error": "Межа повороту має бути від 1 до 1080 градусів",
+                        },
+                        400,
+                    )
+                    return
             with STATE.lock:
                 STATE.settings.update(body)
             self.send_json({"status": "ok", "reboot_required": False})

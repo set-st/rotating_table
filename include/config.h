@@ -87,6 +87,8 @@ constexpr float HOMING_BACKOFF_SPEED_DEG_S =
 constexpr float HOMING_BACKOFF_DEG = 5.0f; // Кут відкату після першого торкання
 constexpr float DEFAULT_ROTATION_LIMIT_DEG =
     180.0f; // Симетричне обмеження повороту відносно нуля
+constexpr float MAX_ROTATION_LIMIT_DEG =
+    1080.0f; // Максимальна симетрична межа повороту в кожен бік
 constexpr uint32_t HOMING_TIMEOUT_SEC =
     35; // Таймаут безпеки (запобігає нескінченному руху при обриві)
 constexpr bool AUTO_HOME_ON_BOOT = true; // Автоматичний пошук нуля при запуску

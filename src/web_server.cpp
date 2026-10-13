@@ -569,10 +569,11 @@ void TableWebServer::handleSaveSettings() {
     if (reqDoc["auto_home_on_boot"].is<bool>()) cfg.autoHomeOnBoot = reqDoc["auto_home_on_boot"].as<bool>();
     if (reqDoc["rotation_limit_deg"].is<float>()) cfg.rotationLimitDeg = reqDoc["rotation_limit_deg"].as<float>();
 
-    if (cfg.rotationLimitDeg < 1.0f || cfg.rotationLimitDeg > 360.0f) {
+    if (cfg.rotationLimitDeg < 1.0f ||
+        cfg.rotationLimitDeg > MAX_ROTATION_LIMIT_DEG) {
         JsonDocument errDoc;
         errDoc["status"] = "error";
-        errDoc["error"] = "Межа повороту має бути від 1 до 360 градусів";
+        errDoc["error"] = "Межа повороту має бути від 1 до 1080 градусів";
         String res;
         serializeJson(errDoc, res);
         server.send(400, "application/json", res);
