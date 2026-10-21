@@ -44,6 +44,8 @@
                              "    pm.test('Статус містить стан столу та IMU', function () {",
                              "        pm.expect(body).to.have.property('state');",
                              "        pm.expect(body).to.have.property('current_angle');",
+                             "        pm.expect(body).to.have.property('current_position_steps');",
+                             "        pm.expect(body).to.have.property('position_updated_ms');",
                              "        pm.expect(body).to.have.property('imu_initialized');",
                              "        pm.expect(body).to.have.property('automatic_enabled');",
                              "    });",

@@ -19,6 +19,8 @@ struct MotionStatus {
     float currentAngle;
     float targetAngle;
     float currentSpeed;
+    int32_t currentPositionSteps;
+    uint32_t positionUpdatedMs;
     bool isHomed;
     bool endstopTriggered;
     bool automaticEnabled;
@@ -138,6 +140,8 @@ private:
     volatile float currentAngleDeg;
     volatile float targetAngleDeg;
     volatile float requestedSpeedDegS;
+    volatile int32_t currentPositionSteps;
+    volatile uint32_t positionUpdatedMs;
     char lastError[64];
 
     uint32_t endstopTriggerStartTime;
@@ -169,6 +173,7 @@ private:
     long degToSteps(float deg) const;
     float stepsToDeg(long steps) const;
     void setState(MotionState newState, const char* errorMsg = nullptr);
+    void logMotionEvent(const char* event, long positionSteps, long targetSteps);
 
     void loadConfig();
     void saveConfig();

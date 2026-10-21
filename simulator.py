@@ -194,11 +194,26 @@ class SimulatorState:
     def status(self) -> dict[str, Any]:
         self.update()
         with self.lock:
+            motor_teeth = float(self.settings["motor_teeth"])
+            table_teeth = float(self.settings["table_teeth"])
+            gear_ratio = (
+                table_teeth / motor_teeth
+                if motor_teeth > 0.0 and table_teeth > 0.0
+                else 1.0
+            )
+            steps_per_degree = (
+                float(self.settings["steps_per_rev"])
+                * float(self.settings["microsteps"])
+                * gear_ratio
+                / 360.0
+            )
             return {
                 "status": "ok",
                 "firmware_version": FIRMWARE_VERSION,
                 "state": self.state,
                 "current_angle": self.current_angle,
+                "current_position_steps": round(self.current_angle * steps_per_degree),
+                "position_updated_ms": int(time.monotonic() * 1000),
                 "target_angle": self.target_angle,
                 "speed": self.speed,
                 "is_homed": self.is_homed,

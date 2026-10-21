@@ -358,6 +358,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <div class="label">Поточний кут</div>
           <div class="value"><span id="valAngle">0.0</span>°</div>
           <div class="sub">Ціль: <span id="valTarget">0.0</span>°</div>
+          <div class="sub">Лічильник: <span id="valPositionSteps">0</span> кроків · millis: <span id="valPositionTimestamp">0</span></div>
         </div>
         <div class="status-item">
           <div class="label">Швидкість</div>
@@ -1761,6 +1762,8 @@ POST /api/wifi/reset</pre>
         // Оновлення градусів у реальному часі
         document.getElementById('valAngle').textContent = st.current_angle.toFixed(1);
         document.getElementById('valTarget').textContent = st.target_angle.toFixed(1);
+        document.getElementById('valPositionSteps').textContent = st.current_position_steps;
+        document.getElementById('valPositionTimestamp').textContent = st.position_updated_ms;
         document.getElementById('valSpeed').textContent = Math.round(st.speed);
 
         // Індикатор калібрування

@@ -19,7 +19,8 @@ MotionController::MotionController()
       motionTaskHandle(nullptr), mutex(nullptr),
       currentStepsPerDegree(STEPS_PER_DEGREE), state(STATE_IDLE),
       isHomed(false), currentAngleDeg(0.0f), targetAngleDeg(0.0f),
-      requestedSpeedDegS(DEFAULT_SPEED_DEG_S), endstopTriggerStartTime(0),
+      requestedSpeedDegS(DEFAULT_SPEED_DEG_S), currentPositionSteps(0),
+      positionUpdatedMs(0), endstopTriggerStartTime(0),
       previousButtonLeft(false), previousButtonRight(false),
       previousButtonStop(false), homingStep(HOME_FAST_APPROACH),
       homingStartTime(0), automaticEnabled(false), automaticAngle(0.0f),
@@ -263,6 +264,9 @@ bool MotionController::begin() {
   // Налаштування AccelStepper
   applyKinematics();
   stepper.setCurrentPosition(0);
+  currentPositionSteps = 0;
+  currentAngleDeg = 0.0f;
+  positionUpdatedMs = millis();
 
   Serial.printf("[Motion] Ініціалізація успішна.\n");
   Serial.printf(
@@ -372,6 +376,16 @@ void MotionController::setState(MotionState newState, const char *errorMsg) {
   }
 }
 
+void MotionController::logMotionEvent(const char *event, long positionSteps,
+                                      long targetSteps) {
+  const float positionDeg = stepsToDeg(positionSteps);
+  const float targetDeg = stepsToDeg(targetSteps);
+  Serial.printf("[MotionEvent] t_ms=%lu,event=%s,pos_steps=%ld,pos_deg=%.3f,"
+                "target_steps=%ld,target_deg=%.3f\n",
+                static_cast<unsigned long>(millis()), event, positionSteps,
+                positionDeg, targetSteps, targetDeg);
+}
+
 bool MotionController::startHoming() {
   if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
     return false;
@@ -389,6 +403,7 @@ bool MotionController::startHoming() {
   homingStartTime = millis();
   homingStep = HOME_FAST_APPROACH;
   setState(STATE_HOMING);
+  logMotionEvent("homing_start", currentPositionSteps, currentPositionSteps);
 
   if (isEndstopPressed()) {
     long backoffSteps = -cfg.homingDirection * degToSteps(HOMING_BACKOFF_DEG);
@@ -425,7 +440,8 @@ bool MotionController::moveTo(float angleDeg, float speedDegS, bool relative) {
   stepper.setAcceleration(cfg.acceleration * currentStepsPerDegree);
 
   float requestedAngle = 0.0f;
-  const float baseAngle = isHomed ? currentAngleDeg : 0.0f;
+  const float baseAngle =
+      isHomed ? stepsToDeg(currentPositionSteps) : 0.0f;
   if (relative) {
     requestedAngle = baseAngle + angleDeg;
   } else {
@@ -437,14 +453,11 @@ bool MotionController::moveTo(float angleDeg, float speedDegS, bool relative) {
         constrain(requestedAngle, -cfg.rotationLimitDeg, cfg.rotationLimitDeg);
   }
   const long targetSteps = degToSteps(requestedAngle);
-  currentAngleDeg = requestedAngle;
   targetAngleDeg = stepsToDeg(targetSteps);
   stepper.moveTo(targetSteps);
   setState(STATE_MOVING);
 
-  Serial.printf(
-      "[Motion] Команда повороту: ціль=%.1f°, швидкість=%.1f°/с, відносно=%d\n",
-      targetAngleDeg, speedDegS, relative);
+  logMotionEvent("move_start", currentPositionSteps, targetSteps);
 
   xSemaphoreGive(mutex);
   return true;
@@ -455,7 +468,7 @@ void MotionController::emergencyStop() {
     stepper.stop();
     stepper.moveTo(stepper.currentPosition());
     setState(STATE_STOPPED);
-    Serial.println("[Motion] Аварійна зупинка! Двигун зупинено.");
+    logMotionEvent("emergency_stop", currentPositionSteps, currentPositionSteps);
     xSemaphoreGive(mutex);
   }
 }
@@ -512,6 +525,8 @@ MotionStatus MotionController::getStatus() {
   s.currentAngle = currentAngleDeg;
   s.targetAngle = (state == STATE_MOVING) ? targetAngleDeg : s.currentAngle;
   s.currentSpeed = requestedSpeedDegS;
+  s.currentPositionSteps = currentPositionSteps;
+  s.positionUpdatedMs = positionUpdatedMs;
   s.isHomed = isHomed;
   s.endstopTriggered = isEndstopPressed();
   s.automaticEnabled = automaticEnabled;
@@ -602,15 +617,19 @@ void MotionController::motionLoop() {
 
       stepper.run();
       if (stepper.distanceToGo() == 0) {
-        currentAngleDeg = stepsToDeg(stepper.currentPosition());
+        const long completedPosition = stepper.currentPosition();
+        currentAngleDeg = stepsToDeg(completedPosition);
         targetAngleDeg = currentAngleDeg;
         setState(STATE_IDLE);
+        logMotionEvent("move_complete", completedPosition, completedPosition);
         Serial.println("[Motion] Цільову позицію досягнуто.");
       }
     } else if (state == STATE_HOMING) {
       if ((millis() - homingStartTime) > (HOMING_TIMEOUT_SEC * 1000UL)) {
         stepper.stop();
         setState(STATE_ERROR, "Таймаут калібрування: кінцевик не спрацював");
+        const long positionSteps = stepper.currentPosition();
+        logMotionEvent("homing_timeout", positionSteps, positionSteps);
         Serial.println("[Motion] Помилка: Таймаут калібрування!");
       } else if (homingStep == HOME_FAST_APPROACH) {
         if (isEndstopPressed()) {
@@ -646,6 +665,7 @@ void MotionController::motionLoop() {
           targetAngleDeg = 0.0f;
           isHomed = true;
           setState(STATE_IDLE);
+          logMotionEvent("homing_complete", 0, 0);
           Serial.println("[Motion] Точне торкання, калібрування завершено! "
                          "Позицію встановлено в 0.0°");
         } else {
@@ -656,6 +676,11 @@ void MotionController::motionLoop() {
         }
       }
     }
+
+    const long positionSteps = stepper.currentPosition();
+    currentPositionSteps = static_cast<int32_t>(positionSteps);
+    currentAngleDeg = stepsToDeg(positionSteps);
+    positionUpdatedMs = millis();
 
     // Керування паузами та скидання сторожового таймера на Core 0
     if (state == STATE_IDLE || state == STATE_STOPPED || state == STATE_ERROR) {

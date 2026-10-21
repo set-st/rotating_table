@@ -215,6 +215,8 @@ curl -X POST http://rotating-table.local/api/home -H "Content-Type: application/
     "status": "ok",
     "state": "IDLE",
     "current_angle": 90.0,
+    "current_position_steps": 2400,
+    "position_updated_ms": 123456,
     "target_angle": 90.0,
     "speed": 45.0,
     "is_homed": true,
@@ -224,6 +226,13 @@ curl -X POST http://rotating-table.local/api/home -H "Content-Type: application/
   Додатково відповідь містить поля `imu_pitch_deg`, `imu_roll_deg`,
   `imu_gyro_x_dps`, `imu_gyro_y_dps`, `imu_gyro_z_dps`,
   `imu_mpu6050_connected`, `imu_barometer_connected` та `imu_error`.
+  Поля `current_position_steps` і `position_updated_ms` показують лічильник
+  фактично виконаних крокових імпульсів та час знімка (мілісекунди від запуску
+  плати); вони оновлюються і під час руху. `current_angle` обчислюється з цього
+  лічильника та кінематики. Це оцінка положення за кроками, а не вимірювання
+  радаром/датчиком; вона не виявляє пропуск кроків або механічний люфт.
+  У Serial Monitor плата пише події `[MotionEvent]` для старту, завершення,
+  аварійної зупинки та homing із часом, фактичними кроками/кутом і ціллю.
   Для калібрування доступні `POST /api/imu/calibrate` (датчик має бути
   нерухомим) та `POST /api/imu/zero` (поточне положення зберігається як 0°).
   Значення `state`:

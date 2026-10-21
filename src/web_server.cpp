@@ -129,6 +129,8 @@ void TableWebServer::handleStatus() {
     doc["firmware_version"] = FIRMWARE_VERSION;
     doc["state"] = st.stateStr;
     doc["current_angle"] = st.currentAngle;
+    doc["current_position_steps"] = st.currentPositionSteps;
+    doc["position_updated_ms"] = st.positionUpdatedMs;
     doc["target_angle"] = st.targetAngle;
     doc["speed"] = st.currentSpeed;
     doc["is_homed"] = st.isHomed;
