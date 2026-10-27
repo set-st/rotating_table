@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1080" viewBox="0 0 1440 1080" role="img" aria-labelledby="title description">
+  <title id="title">Концепції захисту ремінного приводу RailWay</title>
+  <desc id="description">Три принципові схеми захисту нерухомого зубчастого ременя та рухомої каретки: знімний козирок, короб зі щілинними щітками та гнучкий гармошковий кожух.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2878b5"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#db7b20"/>
+    </marker>
+    <pattern id="teeth" width="16" height="12" patternUnits="userSpaceOnUse">
+      <path d="M0 0 H16 V5 L12 11 H4 L0 5 Z" fill="#333b46"/>
+    </pattern>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; fill: #202a35; }
+      .title { font-size: 34px; font-weight: 700; }
+      .subtitle { font-size: 18px; fill: #566575; }
+      .card-title { font-size: 23px; font-weight: 700; }
+      .label { font-size: 16px; }
+      .small { font-size: 14px; fill: #435160; }
+      .card { fill: #fff; stroke: #c9d2dc; stroke-width: 2; }
+      .rail { fill: #d7e0e8; stroke: #647383; stroke-width: 2; }
+      .cover { fill: #b7c8d8; stroke: #4f6578; stroke-width: 3; }
+      .carriage { fill: #f0bb62; stroke: #8d5d16; stroke-width: 2; }
+      .motor { fill: #47596b; stroke: #263545; stroke-width: 2; }
+      .wheel { fill: #303943; stroke: #111820; stroke-width: 2; }
+      .belt { fill: url(#teeth); stroke: #202832; stroke-width: 1; }
+      .water { fill: none; stroke: #2878b5; stroke-width: 4; marker-end: url(#arrow); }
+      .dust { fill: none; stroke: #db7b20; stroke-width: 3; stroke-dasharray: 8 6; marker-end: url(#arrow-orange); }
+      .brush { stroke: #34495e; stroke-width: 4; stroke-dasharray: 3 4; }
+      .dimension { stroke: #526170; stroke-width: 2; fill: none; }
+      .note { fill: #f2f6f9; stroke: #d3dde6; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="1080" fill="#eef2f5"/>
+  <text x="54" y="58" class="title">RailWay — варіанти захисту ременя</text>
+  <text x="54" y="91" class="subtitle">Принципові схеми. Не в масштабі; геометрію потрібно узгодити з профілем, кареткою та положенням шківа.</text>
+
+  <!-- Option A -->
+  <rect x="44" y="122" width="1352" height="278" rx="14" class="card"/>
+  <text x="72" y="160" class="card-title">A. Знімний козирок / U-подібний кожух — простий прототип</text>
+  <text x="74" y="192" class="small">Поздовжній вигляд збоку · кожух захищає ремінь зверху й з боків, біля шківа — рухомий щітковий лабіринт</text>
+
+  <rect x="120" y="302" width="760" height="48" rx="4" class="rail"/>
+  <text x="130" y="382" class="small">Профіль 2040/2020</text>
+  <rect x="210" y="274" width="630" height="12" class="belt"/>
+  <path d="M170 264 V220 H850 V264" fill="none" stroke="#4f6578" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M170 264 V220 H850 V264" fill="none" stroke="#b7c8d8" stroke-width="8" stroke-linejoin="round"/>
+  <text x="190" y="242" class="small">Знімний кожух / козирок</text>
+  <rect x="450" y="249" width="160" height="62" rx="7" class="carriage"/>
+  <rect x="495" y="197" width="72" height="51" rx="7" class="motor"/>
+  <circle cx="530" cy="266" r="22" class="wheel"/>
+  <path d="M508 267 Q530 281 552 267" fill="none" stroke="#f0bb62" stroke-width="7"/>
+  <line x1="455" y1="264" x2="455" y2="286" class="brush"/>
+  <line x1="605" y1="264" x2="605" y2="286" class="brush"/>
+  <path d="M315 175 C315 198 315 208 315 218" class="water"/>
+  <path d="M770 175 C770 198 770 208 770 218" class="water"/>
+  <path d="M780 235 C765 250 740 261 710 270" class="dust"/>
+  <path d="M850 286 V322" class="water"/>
+  <text x="930" y="255" class="small">Окрема зона:</text>
+  <text x="930" y="278" class="small">знімний кожух</text>
+  <text x="930" y="301" class="small">і дренаж унизу</text>
+  <text x="930" y="326" class="small">Щітки біля шківа</text>
+  <text x="930" y="357" class="small">Плюс: простий огляд</text>
+  <text x="930" y="380" class="small">Мінус: не герметично</text>
+
+  <!-- Option B -->
+  <rect x="44" y="420" width="1352" height="278" rx="14" class="card"/>
+  <text x="72" y="458" class="card-title">B. Закритий короб із поздовжньою щілиною та щітками</text>
+  <text x="74" y="490" class="small">Поздовжній вигляд збоку · ремінь усередині короба, шків проходить через вузький захищений проріз</text>
+
+  <rect x="120" y="590" width="760" height="48" rx="4" class="rail"/>
+  <text x="130" y="670" class="small">Профіль / основа</text>
+  <path d="M175 578 V526 H850 V578" fill="#b7c8d8" stroke="#4f6578" stroke-width="4"/>
+  <line x1="175" y1="578" x2="440" y2="578" stroke="#4f6578" stroke-width="4"/>
+  <line x1="600" y1="578" x2="850" y2="578" stroke="#4f6578" stroke-width="4"/>
+  <rect x="220" y="554" width="600" height="12" class="belt"/>
+  <rect x="440" y="558" width="160" height="64" rx="7" class="carriage"/>
+  <rect x="485" y="506" width="72" height="50" rx="7" class="motor"/>
+  <circle cx="520" cy="563" r="22" class="wheel"/>
+  <path d="M498 564 Q520 578 542 564" fill="none" stroke="#f0bb62" stroke-width="7"/>
+  <line x1="430" y1="577" x2="498" y2="577" class="brush"/>
+  <line x1="542" y1="577" x2="610" y2="577" class="brush"/>
+  <path d="M385 513 C405 535 420 552 430 565" class="dust"/>
+  <text x="250" y="518" class="small" fill="#db7b20">Щілина — слабке місце</text>
+  <path d="M825 578 V614" class="water"/>
+  <text x="930" y="556" class="small">Щітки вздовж щілини</text>
+  <text x="930" y="579" class="small">Знімна кришка й дренаж</text>
+  <text x="930" y="618" class="small">Плюс: кращий захист</text>
+  <text x="930" y="641" class="small">від пилу</text>
+  <text x="930" y="672" class="small">Мінус: щілина, доступ</text>
+
+  <!-- Option C -->
+  <rect x="44" y="718" width="1352" height="278" rx="14" class="card"/>
+  <text x="72" y="756" class="card-title">C. Гнучкий гармошковий кожух</text>
+  <text x="74" y="788" class="small">Поздовжній вигляд збоку · рухома каретка закрита, секції кожуха стискаються та розтягуються під час руху</text>
+
+  <rect x="120" y="892" width="760" height="48" rx="4" class="rail"/>
+  <text x="130" y="972" class="small">Профіль із приводом усередині або під кожухом</text>
+  <path d="M200 884 L225 824 L250 884 L275 824 L300 884 L325 824 L350 884 L375 824 L400 884 L425 824 L450 884"
+        fill="none" stroke="#4f6578" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M610 884 L635 824 L660 884 L685 824 L710 884 L735 824 L760 884 L785 824 L810 884"
+        fill="none" stroke="#4f6578" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="450" y="826" width="160" height="82" rx="8" class="carriage"/>
+  <rect x="494" y="778" width="72" height="48" rx="7" class="motor"/>
+  <circle cx="530" cy="882" r="22" class="wheel"/>
+  <rect x="462" y="831" width="136" height="10" fill="#8da2b5"/>
+  <text x="475" y="865" class="small">Каретка</text>
+  <path d="M770 812 C785 830 795 850 800 872" class="water"/>
+  <text x="810" y="816" class="small" fill="#2878b5">Вода стікає</text>
+  <text x="810" y="836" class="small" fill="#2878b5">зовні</text>
+  <text x="930" y="856" class="small">Плюс: добрий</text>
+  <text x="930" y="878" class="small">захист напрямної</text>
+  <text x="930" y="908" class="small">Мінус: на 6 м —</text>
+  <text x="930" y="930" class="small">провисання, вітер</text>
+  <text x="930" y="952" class="small">і місце для складання</text>
+
+  <rect x="44" y="1006" width="1352" height="62" rx="10" class="note"/>
+  <text x="66" y="1032" class="small">Для першого прототипу: варіант A. У кожному варіанті потрібні дренаж і доступ для обслуговування.</text>
+  <text x="66" y="1054" class="small">Перед запуском перевірити зазор: кожух не повинен торкатися ременя, шківа чи рухомої каретки.</text>
+</svg>
