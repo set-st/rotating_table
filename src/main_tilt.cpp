@@ -31,7 +31,7 @@ void setup() {
     // 4. Автоматичний пошук крайньої точки (Homing) при увімкненні, якщо налаштовано
     if (cfg.autoHomeOnBoot) {
         Serial.println("[Boot] Запуск автоматичного пошуку крайньої точки...");
-        tiltCtrl.startHoming();
+        tiltCtrl.startHoming(true);
     }
 
     Serial.println("[System] Платформа нахилу готова до роботи.");

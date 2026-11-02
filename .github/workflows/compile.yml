@@ -73,6 +73,7 @@ jobs:
           mkdir -p dist
           cp .pio/build/rotating_table/firmware.bin dist/rotating_table.bin
           cp .pio/build/tilt_platform/firmware.bin dist/tilt_platform.bin
+          cp .pio/build/railway/firmware.bin dist/railway.bin
 
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
@@ -89,10 +90,10 @@ jobs:
         run: |
           RELEASE_TAG="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/rotating_table.bin dist/tilt_platform.bin --clobber
+            gh release upload "$RELEASE_TAG" dist/rotating_table.bin dist/tilt_platform.bin dist/railway.bin --clobber
           else
             gh release create "$RELEASE_TAG" \
-              dist/rotating_table.bin dist/tilt_platform.bin \
+              dist/rotating_table.bin dist/tilt_platform.bin dist/railway.bin \
               --generate-notes \
               --title "$RELEASE_TAG"
           fi

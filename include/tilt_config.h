@@ -59,6 +59,7 @@ struct TiltHardwareConfig {
     float homingSlowSpeed = 2.0f;  // град/с
     float homingBackoffDeg = 3.0f; // Відкат від кінцевика (град)
     bool autoHomeOnBoot = false;   // Автоматичний пошук нуля при запуску
+    float homeTargetAngle = 0.0f;  // Кут після homing при запуску, якщо нуль IMU не задано
 
     // Розрахунок кількості імпульсів (кроків) на 1 градус нахилу
     float getStepsPerDegree() const {
@@ -79,7 +80,9 @@ struct TiltStatus {
     bool isHomed = false;        // Чи виконано пошук крайньої точки
     bool endstopTriggered = false; // Чи натиснуто кінцевик
     bool holdActive = false;     // Чи увімкнено режим автоматичного підтримання положення
+    bool telemetryReceived = false; // Чи отримано статусне сповіщення від плати нахилу
     bool gyroConnected = false;  // Чи виявлено GY-521 (MPU6050)
+    bool gyroZeroConfigured = false; // Чи збережено нульове положення IMU
     float pitchDeg = 0.0f;       // Сирий/відфільтрований кут Pitch
     float rollDeg = 0.0f;        // Сирий/відфільтрований кут Roll
     char errorMessage[64] = {0};

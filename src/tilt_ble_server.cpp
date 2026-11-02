@@ -280,7 +280,7 @@ void TiltBleServer::processCommand(const char* payload) {
         bool relative = doc["relative"] | false;
         tiltCtrl.moveTo(angle, speed, relative);
     } else if (strcmp(cmd, "home") == 0) {
-        tiltCtrl.startHoming();
+        tiltCtrl.startHoming(true);
     } else if (strcmp(cmd, "stop") == 0) {
         tiltCtrl.emergencyStop();
     } else if (strcmp(cmd, "zero") == 0) {
@@ -343,12 +343,15 @@ void TiltBleServer::processSettingsWrite(const char* payload) {
     if (doc["homing_slow_speed"].is<float>()) cfg.homingSlowSpeed = doc["homing_slow_speed"].as<float>();
     if (doc["homing_backoff_deg"].is<float>()) cfg.homingBackoffDeg = doc["homing_backoff_deg"].as<float>();
     if (doc["auto_home"].is<bool>()) cfg.autoHomeOnBoot = doc["auto_home"].as<bool>();
+    if (doc["home_target_angle"].is<float>()) cfg.homeTargetAngle = doc["home_target_angle"].as<float>();
 
     if (doc["hold_deadband"].is<float>()) cfg.holdDeadband = doc["hold_deadband"].as<float>();
     if (doc["hold_kp"].is<float>()) cfg.holdKp = doc["hold_kp"].as<float>();
 
     bool rebootRequired = false;
-    tiltCtrl.applyConfig(cfg, rebootRequired);
+    if (!tiltCtrl.applyConfig(cfg, rebootRequired)) {
+        return;
+    }
     Serial.println("[Tilt BLE] Нові налаштування прийнято та збережено в NVS.");
 
     sendSettingsNotification();
@@ -368,23 +371,25 @@ void TiltBleServer::sendStatusNotification() {
     JsonDocument doc;
     doc["state"] = st.stateStr;
     doc["fw"] = TILT_FIRMWARE_VERSION;
-    doc["angle"] = serialized(String(st.gyroAngle, 2));
-    doc["motor_angle"] = serialized(String(st.motorAngle, 2));
-    doc["target"] = serialized(String(st.targetAngle, 2));
-    doc["speed"] = serialized(String(st.currentSpeed, 1));
+    doc["angle"] = st.gyroAngle;
+    doc["motor_angle"] = st.motorAngle;
+    doc["target"] = st.targetAngle;
+    doc["speed"] = st.currentSpeed;
     doc["homed"] = st.isHomed;
     doc["endstop"] = st.endstopTriggered;
     doc["hold"] = st.holdActive;
     doc["gyro_ok"] = st.gyroConnected;
-    doc["pitch"] = serialized(String(st.pitchDeg, 2));
-    doc["roll"] = serialized(String(st.rollDeg, 2));
+    doc["gyro_zero_set"] = st.gyroZeroConfigured;
+    doc["pitch"] = st.pitchDeg;
+    doc["roll"] = st.rollDeg;
     if (strlen(st.errorMessage) > 0) {
         doc["err"] = st.errorMessage;
     }
 
     String out;
     serializeJson(doc, out);
-    pStatusChar->setValue(out.c_str());
+    pStatusChar->setValue(
+        reinterpret_cast<const uint8_t*>(out.c_str()), out.length());
     pStatusChar->notify();
 }
 
@@ -425,6 +430,7 @@ void TiltBleServer::sendSettingsNotification() {
     doc["homing_slow_speed"] = cfg.homingSlowSpeed;
     doc["homing_backoff_deg"] = cfg.homingBackoffDeg;
     doc["auto_home"] = cfg.autoHomeOnBoot;
+    doc["home_target_angle"] = cfg.homeTargetAngle;
 
     doc["hold_deadband"] = cfg.holdDeadband;
     doc["hold_kp"] = cfg.holdKp;

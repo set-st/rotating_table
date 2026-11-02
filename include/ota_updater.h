@@ -17,7 +17,8 @@ class OtaUpdater {
 public:
     OtaReleaseInfo getLatestRelease(
         const String& assetName = "rotating_table.bin");
-    bool installLatestRelease(String& error);
+    bool installLatestRelease(String& error,
+                              const String& assetName = "rotating_table.bin");
     bool installTiltLatestRelease(TableBleClient& bleClient, String& error);
 
 private:

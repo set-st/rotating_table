@@ -10,17 +10,19 @@ TiltImu tiltImu;
 
 TiltImu::TiltImu()
     : sdaPin(21), sclPin(22), mpuAddress(0x68), tiltAxis(0),
-      initialized(false), connected(false),
+      initialized(false), connected(false), zeroConfigured(false),
       gyroBiasX(0.0f), gyroBiasY(0.0f), gyroBiasZ(0.0f),
       pitchOffsetDeg(0.0f), rollOffsetDeg(0.0f),
       filteredPitchDeg(0.0f), filteredRollDeg(0.0f), currentGyroRate(0.0f),
-      lastUpdateMs(0), lastSampleUs(0) {}
+      lastUpdateMs(0), lastSampleUs(0), lastReadErrorLogMs(0) {}
 
 void TiltImu::loadNvs() {
     Preferences prefs;
     if (prefs.begin(NVS_TILT_IMU_NS, true)) {
         pitchOffsetDeg = prefs.getFloat("pitch_zero", 0.0f);
         rollOffsetDeg = prefs.getFloat("roll_zero", 0.0f);
+        zeroConfigured = prefs.getBool(
+            "zero_set", pitchOffsetDeg != 0.0f || rollOffsetDeg != 0.0f);
         gyroBiasX = prefs.getFloat("bias_x", 0.0f);
         gyroBiasY = prefs.getFloat("bias_y", 0.0f);
         gyroBiasZ = prefs.getFloat("bias_z", 0.0f);
@@ -35,6 +37,7 @@ void TiltImu::saveNvs() {
     if (prefs.begin(NVS_TILT_IMU_NS, false)) {
         prefs.putFloat("pitch_zero", pitchOffsetDeg);
         prefs.putFloat("roll_zero", rollOffsetDeg);
+        prefs.putBool("zero_set", zeroConfigured);
         prefs.putFloat("bias_x", gyroBiasX);
         prefs.putFloat("bias_y", gyroBiasY);
         prefs.putFloat("bias_z", gyroBiasZ);
@@ -55,21 +58,31 @@ bool TiltImu::readSample(int16_t& ax, int16_t& ay, int16_t& az,
                          int16_t& gx, int16_t& gy, int16_t& gz) {
     Wire.beginTransmission(mpuAddress);
     Wire.write(0x3B);
-    if (Wire.endTransmission(false) != 0 ||
-        Wire.requestFrom(mpuAddress, static_cast<uint8_t>(14)) != 14) {
+    if (Wire.endTransmission(false) != 0) {
         return false;
     }
-    auto readWord = []() -> int16_t {
-        return static_cast<int16_t>((Wire.read() << 8) | Wire.read());
+    const uint8_t expectedBytes = 14;
+    if (Wire.requestFrom(mpuAddress, expectedBytes) != expectedBytes ||
+        Wire.available() < expectedBytes) {
+        while (Wire.available()) {
+            Wire.read();
+        }
+        return false;
+    }
+
+    auto readWord = [](int16_t& value) -> bool {
+        const int highByte = Wire.read();
+        const int lowByte = Wire.read();
+        if (highByte < 0 || lowByte < 0) {
+            return false;
+        }
+        value = static_cast<int16_t>((highByte << 8) | lowByte);
+        return true;
     };
-    ax = readWord();
-    ay = readWord();
-    az = readWord();
-    readWord(); // temperature
-    gx = readWord();
-    gy = readWord();
-    gz = readWord();
-    return true;
+    int16_t temperature;
+    return readWord(ax) && readWord(ay) && readWord(az) &&
+           readWord(temperature) && readWord(gx) && readWord(gy) &&
+           readWord(gz);
 }
 
 bool TiltImu::begin(int sda, int scl, uint8_t addr, int axis) {
@@ -80,8 +93,13 @@ bool TiltImu::begin(int sda, int scl, uint8_t addr, int axis) {
 
     loadNvs();
 
-    Wire.begin(sdaPin, sclPin);
-    Wire.setClock(400000);
+    if (!Wire.begin(sdaPin, sclPin)) {
+        Serial.printf("[Tilt IMU] Не вдалося запустити I2C на SDA=%d, SCL=%d\n",
+                      sdaPin, sclPin);
+        return false;
+    }
+    Wire.setTimeOut(50);
+    Wire.setClock(100000);
 
     connected = probe(mpuAddress);
     if (!connected) {
@@ -90,36 +108,59 @@ bool TiltImu::begin(int sda, int scl, uint8_t addr, int axis) {
         return false;
     }
 
-    // Пробудження MPU-6050 (PWR_MGMT_1 = 0)
     Wire.beginTransmission(mpuAddress);
-    Wire.write(0x6B);
-    Wire.write(0x00);
-    if (Wire.endTransmission() != 0) {
-        Serial.println("[Tilt IMU] Помилка надсилання команди пробудження MPU-6050");
+    Wire.write(0x75); // WHO_AM_I
+    if (Wire.endTransmission(false) != 0 ||
+        Wire.requestFrom(mpuAddress, static_cast<uint8_t>(1)) != 1 ||
+        Wire.available() < 1) {
+        Serial.println("[Tilt IMU] MPU-6050 відповідає на адресу, але WHO_AM_I прочитати не вдалося.");
+        connected = false;
+        return false;
+    }
+    const int whoAmI = Wire.read();
+    Serial.printf("[Tilt IMU] WHO_AM_I=0x%02X (очікується 0x68)\n", whoAmI);
+
+    auto writeRegister = [this](uint8_t reg, uint8_t value) {
+        Wire.beginTransmission(mpuAddress);
+        Wire.write(reg);
+        Wire.write(value);
+        return Wire.endTransmission() == 0;
+    };
+    if (!writeRegister(0x6B, 0x00)) {
+        Serial.println("[Tilt IMU] Помилка пробудження MPU-6050 (PWR_MGMT_1).");
+        connected = false;
+        return false;
+    }
+    delay(100);
+    if (!writeRegister(0x1C, 0x00)) {
+        Serial.println("[Tilt IMU] Не вдалося налаштувати акселерометр MPU-6050.");
+        connected = false;
+        return false;
+    }
+    if (!writeRegister(0x1B, 0x00)) {
+        Serial.println("[Tilt IMU] Не вдалося налаштувати гіроскоп MPU-6050.");
         connected = false;
         return false;
     }
 
-    // Налаштування акселерометра (±2g: AFS_SEL = 0)
-    Wire.beginTransmission(mpuAddress);
-    Wire.write(0x1C);
-    Wire.write(0x00);
-    Wire.endTransmission();
-
-    // Налаштування гіроскопа (±250°/s: FS_SEL = 0)
-    Wire.beginTransmission(mpuAddress);
-    Wire.write(0x1B);
-    Wire.write(0x00);
-    Wire.endTransmission();
+    int16_t ax, ay, az, gx, gy, gz;
+    if (!readSample(ax, ay, az, gx, gy, gz)) {
+        Serial.printf("[Tilt IMU] Датчик відповідає за адресою 0x%02X, але не віддає 14 байтів вимірювання на 100 кГц.\n",
+                      mpuAddress);
+        connected = false;
+        return false;
+    }
 
     initialized = true;
+    connected = true;
     filteredPitchDeg = 0.0f;
     filteredRollDeg = 0.0f;
     lastSampleUs = micros();
     lastUpdateMs = millis();
+    lastReadErrorLogMs = millis();
 
-    Serial.printf("[Tilt IMU] MPU-6050 (GY-521) успішно ініціалізовано: SDA=%d, SCL=%d, Addr=0x%02X\n",
-                  sdaPin, sclPin, mpuAddress);
+    Serial.printf("[Tilt IMU] MPU-6050 ініціалізовано й перший зразок прочитано: SDA=%d, SCL=%d, Addr=0x%02X, ACC=(%d,%d,%d), GYRO=(%d,%d,%d)\n",
+                  sdaPin, sclPin, mpuAddress, ax, ay, az, gx, gy, gz);
     return true;
 }
 
@@ -132,7 +173,15 @@ void TiltImu::update() {
     int16_t ax, ay, az, gx, gy, gz;
     if (!readSample(ax, ay, az, gx, gy, gz)) {
         connected = false;
+        if (millis() - lastReadErrorLogMs >= 1000) {
+            lastReadErrorLogMs = millis();
+            Serial.printf("[Tilt IMU] Помилка читання вимірювань MPU-6050 за адресою 0x%02X (SDA=%d, SCL=%d, I2C=100 кГц).\n",
+                          mpuAddress, sdaPin, sclPin);
+        }
         return;
+    }
+    if (!connected) {
+        Serial.println("[Tilt IMU] Читання MPU-6050 відновлено.");
     }
     connected = true;
 
@@ -187,6 +236,10 @@ bool TiltImu::isConnected() const {
     return connected;
 }
 
+bool TiltImu::hasZeroOrientation() const {
+    return zeroConfigured;
+}
+
 bool TiltImu::zeroOrientation() {
     if (!initialized || !connected) {
         return false;
@@ -194,6 +247,7 @@ bool TiltImu::zeroOrientation() {
     // Запам'ятовуємо поточні фізичні кути фільтра як нове нульове положення в NVS
     pitchOffsetDeg = filteredPitchDeg;
     rollOffsetDeg = filteredRollDeg;
+    zeroConfigured = true;
     saveNvs();
     Serial.printf("[Tilt IMU] Встановлено та збережено новий нуль: Pitch=%.2f°, Roll=%.2f°\n",
                   pitchOffsetDeg, rollOffsetDeg);

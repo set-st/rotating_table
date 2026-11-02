@@ -1,6 +1,7 @@
 #include "tilt_controller.h"
 #include "tilt_imu.h"
 #include <Preferences.h>
+#include <math.h>
 
 static const char* NVS_TILT_CFG_NS = "tilt_cfg";
 TiltController tiltCtrl;
@@ -12,6 +13,7 @@ TiltController::TiltController()
       state(TILT_STATE_IDLE), isHomed(false),
       currentAngleDeg(0.0f), targetAngleDeg(0.0f),
       requestedSpeedDegS(0.0f), holdActive(false), holdTargetDeg(0.0f),
+      postHomingActionPending(false),
       endstopTriggerStartTime(0),
       homingStep(THOME_FAST), homingStartTime(0) {
     memset(lastError, 0, sizeof(lastError));
@@ -69,6 +71,7 @@ void TiltController::loadConfig() {
     cfg.homingSlowSpeed = prefs.getFloat("h_slow", cfg.homingSlowSpeed);
     cfg.homingBackoffDeg = prefs.getFloat("h_back", cfg.homingBackoffDeg);
     cfg.autoHomeOnBoot = prefs.getBool("autohome", cfg.autoHomeOnBoot);
+    cfg.homeTargetAngle = prefs.getFloat("home_target", cfg.homeTargetAngle);
 
     prefs.end();
 }
@@ -111,6 +114,7 @@ void TiltController::saveConfig() {
     prefs.putFloat("h_slow", cfg.homingSlowSpeed);
     prefs.putFloat("h_back", cfg.homingBackoffDeg);
     prefs.putBool("autohome", cfg.autoHomeOnBoot);
+    prefs.putFloat("home_target", cfg.homeTargetAngle);
 
     prefs.end();
 }
@@ -224,6 +228,7 @@ bool TiltController::moveTo(float angleDeg, float speedDegS, bool relative) {
     }
 
     holdActive = false; // Звичайний рух вимикає активне утримання за гіроскопом
+    stepper.enableOutputs();
 
     const float baseAngle = isHomed ? currentAngleDeg : 0.0f;
     float finalAngle = relative ? (baseAngle + angleDeg) : angleDeg;
@@ -243,7 +248,7 @@ bool TiltController::moveTo(float angleDeg, float speedDegS, bool relative) {
     return true;
 }
 
-bool TiltController::startHoming() {
+bool TiltController::startHoming(bool moveToStartupTarget) {
     if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
 
     if (state == TILT_STATE_HOMING) {
@@ -252,8 +257,10 @@ bool TiltController::startHoming() {
     }
 
     holdActive = false;
+    postHomingActionPending = moveToStartupTarget;
     homingStep = THOME_FAST;
     homingStartTime = millis();
+    stepper.enableOutputs();
 
     // Задаємо рух у напрямку кінцевика з великим запасом
     stepper.setMaxSpeed(cfg.homingFastSpeed * currentStepsPerDegree);
@@ -269,6 +276,7 @@ bool TiltController::startHoming() {
 void TiltController::emergencyStop() {
     if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         holdActive = false;
+        postHomingActionPending = false;
         stepper.stop();
         setState(TILT_STATE_STOPPED, "Зупинено користувачем");
         xSemaphoreGive(mutex);
@@ -371,8 +379,37 @@ void TiltController::motionLoop() {
                     targetAngleDeg = cfg.minAngle;
                     isHomed = true;
                     homingStep = THOME_COMPLETE;
-                    setState(TILT_STATE_IDLE);
                     Serial.println("[Tilt Ctrl] Калібрування крайньої точки успішно завершено!");
+                    if (postHomingActionPending) {
+                        postHomingActionPending = false;
+                        if (tiltImu.hasZeroOrientation()) {
+                            if (!tiltImu.isConnected()) {
+                                setState(TILT_STATE_ERROR,
+                                         "Збережено нуль IMU, але гіроскоп недоступний; вирівнювання пропущено");
+                                Serial.println("[Tilt Ctrl] Автовирівнювання скасовано: збережений нуль IMU є, але датчик недоступний.");
+                            } else {
+                                holdTargetDeg = 0.0f;
+                                targetAngleDeg = 0.0f;
+                                holdActive = true;
+                                setState(TILT_STATE_HOLDING);
+                                Serial.println("[Tilt Ctrl] Після homing увімкнено вирівнювання за збереженим нулем гіроскопа (0°).");
+                            }
+                        } else {
+                            const float startupAngle = constrain(
+                                cfg.homeTargetAngle, cfg.minAngle, cfg.maxAngle);
+                            currentAngleDeg = stepsToDeg(stepper.currentPosition());
+                            targetAngleDeg = startupAngle;
+                            requestedSpeedDegS = cfg.defaultSpeed;
+                            stepper.setMaxSpeed(cfg.defaultSpeed * currentStepsPerDegree);
+                            stepper.moveTo(degToSteps(startupAngle));
+                            setState(TILT_STATE_MOVING);
+                            Serial.printf("[Tilt Ctrl] Після homing рух до стартового кута %.2f° (налаштовано %.2f°, межі %.2f..%.2f°).\n",
+                                          startupAngle, cfg.homeTargetAngle,
+                                          cfg.minAngle, cfg.maxAngle);
+                        }
+                    } else {
+                        setState(TILT_STATE_IDLE);
+                    }
                 } else {
                     stepper.run();
                 }
@@ -458,6 +495,7 @@ TiltStatus TiltController::getStatus() {
     }
 
     st.gyroConnected = tiltImu.isConnected();
+    st.gyroZeroConfigured = tiltImu.hasZeroOrientation();
     st.gyroAngle = tiltImu.getTiltAngle();
     st.pitchDeg = tiltImu.getPitch();
     st.rollDeg = tiltImu.getRoll();
@@ -469,6 +507,11 @@ TiltHardwareConfig TiltController::getConfig() const {
 }
 
 bool TiltController::applyConfig(const TiltHardwareConfig& newCfg, bool& rebootRequired) {
+    if (!isfinite(newCfg.homeTargetAngle)) {
+        Serial.println("[Tilt Ctrl] Відхилено конфігурацію: стартовий кут після homing має бути скінченним числом.");
+        return false;
+    }
+
     rebootRequired = (newCfg.pinStep != cfg.pinStep ||
                       newCfg.pinDir != cfg.pinDir ||
                       newCfg.pinEnable != cfg.pinEnable ||

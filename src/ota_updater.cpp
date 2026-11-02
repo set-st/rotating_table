@@ -6,7 +6,9 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
+#ifndef TARGET_RAILWAY
 #include "table_ble_client.h"
+#endif
 
 OtaUpdater otaUpdater;
 
@@ -71,8 +73,8 @@ OtaReleaseInfo OtaUpdater::getLatestRelease(const String& assetName) {
     return info;
 }
 
-bool OtaUpdater::installLatestRelease(String& error) {
-    OtaReleaseInfo release = getLatestRelease("rotating_table.bin");
+bool OtaUpdater::installLatestRelease(String& error, const String& assetName) {
+    OtaReleaseInfo release = getLatestRelease(assetName);
     if (!release.available) {
         error = release.error;
         return false;
@@ -132,6 +134,7 @@ bool OtaUpdater::installLatestRelease(String& error) {
     return true;
 }
 
+#ifndef TARGET_RAILWAY
 bool OtaUpdater::installTiltLatestRelease(TableBleClient& bleClient,
                                           String& error) {
     if (WiFi.status() != WL_CONNECTED) {
@@ -230,3 +233,4 @@ bool OtaUpdater::installTiltLatestRelease(TableBleClient& bleClient,
     }
     return true;
 }
+#endif

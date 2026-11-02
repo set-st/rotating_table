@@ -14,7 +14,7 @@ public:
 
     // Команди руху
     bool moveTo(float angleDeg, float speedDegS = 0.0f, bool relative = false);
-    bool startHoming();
+    bool startHoming(bool moveToStartupTarget = false);
     void emergencyStop();
 
     // Ручне виставлення в нуль
@@ -53,6 +53,7 @@ private:
     volatile float requestedSpeedDegS;
     volatile bool holdActive;
     volatile float holdTargetDeg;
+    bool postHomingActionPending;
 
     uint32_t endstopTriggerStartTime;
     char lastError[64];

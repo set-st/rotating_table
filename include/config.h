@@ -104,10 +104,14 @@ constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS =
     10000; // Час очікування роутера перед переходом в режим точки доступу
 
 // Власна точка доступу (SoftAP) за замовчуванням:
+#ifndef AP_SSID
 #define AP_SSID "RotatingTable-ESP32"
+#endif
 #define AP_PASSWORD                                                            \
   "12345678" // Мінімум 8 символів для WPA2 або порожньо "" для відкритої мережі
 
+#ifndef HOSTNAME
 #define HOSTNAME                                                               \
   "rotating-table" // Доступно за адресою http://rotating-table.local
+#endif
 constexpr uint16_t WEB_SERVER_PORT = 80;

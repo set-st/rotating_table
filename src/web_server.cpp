@@ -772,8 +772,10 @@ void TableWebServer::handleTiltStatus() {
     doc["connected"] = tableBleClient.isConnected();
     doc["rssi"] = tableBleClient.getRssi();
     doc["target_address"] = tableBleClient.getTargetAddress();
+    doc["target_address_type"] = tableBleClient.getTargetAddressType();
     doc["firmware_version"] = st.firmwareVersion;
     doc["auto_connect"] = tableBleClient.isAutoConnect();
+    doc["telemetry_received"] = st.telemetryReceived;
     doc["state"] = st.stateStr;
     doc["angle"] = st.gyroAngle;
     doc["motor_angle"] = st.motorAngle;
@@ -783,6 +785,7 @@ void TableWebServer::handleTiltStatus() {
     doc["endstop_triggered"] = st.endstopTriggered;
     doc["hold_active"] = st.holdActive;
     doc["gyro_connected"] = st.gyroConnected;
+    doc["gyro_zero_configured"] = st.gyroZeroConfigured;
     doc["pitch"] = st.pitchDeg;
     doc["roll"] = st.rollDeg;
     if (strlen(st.errorMessage) > 0) {
@@ -900,7 +903,7 @@ void TableWebServer::handleTiltSaveSettings() {
 
 void TableWebServer::handleTiltBtScan() {
     sendCorsHeaders();
-    std::vector<BleDiscoveredDevice> list = tableBleClient.scanDevices(3);
+    std::vector<BleDiscoveredDevice> list = tableBleClient.scanDevices(8);
     JsonDocument doc;
     doc["status"] = "ok";
     JsonArray arr = doc["devices"].to<JsonArray>();
@@ -908,6 +911,8 @@ void TableWebServer::handleTiltBtScan() {
         JsonObject o = arr.add<JsonObject>();
         o["name"] = dev.name;
         o["address"] = dev.address;
+        o["address_type"] = dev.addressType;
+        o["is_tilt_device"] = dev.isTiltDevice;
         o["rssi"] = dev.rssi;
     }
     String res;
@@ -926,7 +931,8 @@ void TableWebServer::handleTiltBtConnect() {
     tableBleClient.setAutoConnect(autoConn);
     bool ok = true;
     if (address.length() > 0) {
-        ok = tableBleClient.connectTo(address);
+        const uint8_t addressType = doc["address_type"] | 0;
+        ok = tableBleClient.connectTo(address, addressType);
     } else if (doc["disconnect"] | false) {
         tableBleClient.disconnect();
     }

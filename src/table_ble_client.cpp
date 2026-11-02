@@ -24,13 +24,19 @@ public:
         parent->pSettingsChar = nullptr;
         parent->pOtaControlChar = nullptr;
         parent->pOtaDataChar = nullptr;
+        if (xSemaphoreTake(parent->mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            parent->cachedStatus.telemetryReceived = false;
+            parent->cachedStatus.stateStr = "DISCONNECTED";
+            xSemaphoreGive(parent->mutex);
+        }
         Serial.println("[Table BLE Client] Зв'язок із платформою нахилу втрачено.");
     }
 };
 
 TableBleClient::TableBleClient()
     : connected(false), connecting(false), autoConnectEnabled(true),
-      autoConnectAttempts(0), targetAddress(""), lastRssi(0), lastConnectAttemptMs(0),
+      autoConnectAttempts(0), targetAddress(""), targetAddressType(0),
+      lastRssi(0), lastConnectAttemptMs(0),
     pClient(nullptr), pCmdChar(nullptr), pStatusChar(nullptr), pSettingsChar(nullptr),
     pOtaControlChar(nullptr), pOtaDataChar(nullptr) {
     mutex = xSemaphoreCreateMutex();
@@ -44,10 +50,11 @@ void TableBleClient::loadNvs() {
     Preferences prefs;
     if (prefs.begin(NVS_TABLE_BLE_NS, true)) {
         targetAddress = prefs.getString("mac", "");
+        targetAddressType = prefs.getUChar("addr_type", 0);
         autoConnectEnabled = prefs.getBool("auto", true);
         prefs.end();
-        Serial.printf("[Table BLE Client] NVS: Цільова адреса: '%s', Авто-підключення: %d\n",
-                      targetAddress.c_str(), autoConnectEnabled);
+        Serial.printf("[Table BLE Client] NVS: Цільова адреса: '%s' (type %u), Авто-підключення: %d\n",
+                      targetAddress.c_str(), targetAddressType, autoConnectEnabled);
     }
 }
 
@@ -55,6 +62,7 @@ void TableBleClient::saveNvs() {
     Preferences prefs;
     if (prefs.begin(NVS_TABLE_BLE_NS, false)) {
         prefs.putString("mac", targetAddress);
+        prefs.putUChar("addr_type", targetAddressType);
         prefs.putBool("auto", autoConnectEnabled);
         prefs.end();
     }
@@ -77,7 +85,7 @@ bool TableBleClient::begin() {
     return true;
 }
 
-bool TableBleClient::connectInternal(const String& address) {
+bool TableBleClient::connectInternal(const String& address, uint8_t addressType) {
     if (connecting) return false;
     connecting = true;
 
@@ -92,11 +100,17 @@ bool TableBleClient::connectInternal(const String& address) {
         client->disconnect();
         delay(100);
     }
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        cachedStatus.telemetryReceived = false;
+        cachedStatus.stateStr = "WAITING_DATA";
+        xSemaphoreGive(mutex);
+    }
 
     NimBLEAddress bleAddr;
     if (address.length() > 0) {
-        bleAddr = NimBLEAddress(address.c_str());
-        Serial.printf("[Table BLE Client] Спроба підключення до MAC: %s...\n", address.c_str());
+        bleAddr = NimBLEAddress(std::string(address.c_str()), addressType);
+        Serial.printf("[Table BLE Client] Спроба підключення до MAC: %s (type %u)...\n",
+                      address.c_str(), addressType);
     } else {
         // Якщо MAC не вказано, шукаємо пристрій за UUID сервісу або за назвою
         Serial.println("[Table BLE Client] Пошук пристрою TiltTable поблизу...");
@@ -104,22 +118,24 @@ bool TableBleClient::connectInternal(const String& address) {
         pScan->setActiveScan(true);
         pScan->setInterval(100);
         pScan->setWindow(99);
-        NimBLEScanResults results = pScan->start(2, false);
+        NimBLEScanResults results = pScan->start(5, false);
 
         bool found = false;
         for (int i = 0; i < results.getCount(); ++i) {
             NimBLEAdvertisedDevice dev = results.getDevice(i);
             const std::string devName = dev.getName();
-            const String advertisedName = devName.empty() ? String(TILT_DEFAULT_DEVICE_NAME) : String(devName.c_str());
+            const String advertisedName = devName.empty() ? String("") : String(devName.c_str());
             const bool isTiltDevice = dev.isAdvertisingService(NimBLEUUID(TILT_BLE_SERVICE_UUID)) ||
                                       advertisedName.startsWith(TILT_DEFAULT_DEVICE_NAME);
             if (isTiltDevice) {
                 bleAddr = dev.getAddress();
                 targetAddress = String(bleAddr.toString().c_str());
+                targetAddressType = bleAddr.getType();
                 saveNvs();
                 found = true;
-                Serial.printf("[Table BLE Client] Знайдено TiltTable: %s (%s, RSSI %d)\n",
-                              advertisedName.c_str(), targetAddress.c_str(), dev.getRSSI());
+                Serial.printf("[Table BLE Client] Знайдено TiltTable: %s (%s, type %u, RSSI %d)\n",
+                              advertisedName.length() ? advertisedName.c_str() : "(без імені)",
+                              targetAddress.c_str(), targetAddressType, dev.getRSSI());
                 break;
             }
         }
@@ -173,9 +189,8 @@ bool TableBleClient::connectInternal(const String& address) {
     // Підписка на сповіщення статусу
     if (pStat->canNotify()) {
         pStat->subscribe(true, [this](NimBLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify) {
-            String jsonStr((char*)pData, length);
             JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, jsonStr);
+            DeserializationError err = deserializeJson(doc, pData, length);
             if (!err) {
                 if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                     cachedStatus.stateStr = strdup(doc["state"] | "IDLE");
@@ -190,7 +205,9 @@ bool TableBleClient::connectInternal(const String& address) {
                     cachedStatus.isHomed = doc["homed"] | false;
                     cachedStatus.endstopTriggered = doc["endstop"] | false;
                     cachedStatus.holdActive = doc["hold"] | false;
+                    cachedStatus.telemetryReceived = true;
                     cachedStatus.gyroConnected = doc["gyro_ok"] | false;
+                    cachedStatus.gyroZeroConfigured = doc["gyro_zero_set"] | false;
                     cachedStatus.pitchDeg = doc["pitch"] | 0.0f;
                     cachedStatus.rollDeg = doc["roll"] | 0.0f;
                     if (doc["err"].is<const char*>()) {
@@ -200,8 +217,22 @@ bool TableBleClient::connectInternal(const String& address) {
                     }
                     xSemaphoreGive(mutex);
                 }
+            } else {
+                static uint32_t lastInvalidStatusLogMs = 0;
+                const uint32_t now = millis();
+                if (now - lastInvalidStatusLogMs >= 2000) {
+                    lastInvalidStatusLogMs = now;
+                    const size_t previewLength = min(length, static_cast<size_t>(160));
+                    Serial.printf("[Table BLE Client] Некоректне статусне сповіщення (%s, %u bytes): %.*s\n",
+                                  err.c_str(),
+                                  static_cast<unsigned>(length),
+                                  static_cast<int>(previewLength),
+                                  reinterpret_cast<const char*>(pData));
+                }
             }
         });
+    } else {
+        Serial.println("[Table BLE Client] Статусна характеристика не підтримує BLE notifications.");
     }
 
     // Підписка на оновлення налаштувань
@@ -241,7 +272,7 @@ void TableBleClient::update() {
         connected = false;
         if (autoConnectEnabled && !connecting && millis() - lastConnectAttemptMs > 4000 && autoConnectAttempts < 2) {
             lastConnectAttemptMs = millis();
-            const bool ok = connectInternal(targetAddress);
+            const bool ok = connectInternal(targetAddress, targetAddressType);
             if (!ok) {
                 autoConnectAttempts++;
                 Serial.printf("[Table BLE Client] Авто-підключення невдале (%u/2). Переводимо в ручний режим.\n",
@@ -418,23 +449,27 @@ std::vector<BleDiscoveredDevice> TableBleClient::scanDevices(uint32_t durationSe
         NimBLEAdvertisedDevice dev = results.getDevice(i);
         BleDiscoveredDevice d;
         const std::string devName = dev.getName();
-        d.name = devName.empty() ? String(TILT_DEFAULT_DEVICE_NAME) : String(devName.c_str());
+        d.name = devName.empty() ? String("") : String(devName.c_str());
         d.address = String(dev.getAddress().toString().c_str());
+        d.addressType = dev.getAddress().getType();
         d.rssi = dev.getRSSI();
-        Serial.printf("[Table BLE Client] Scan result: %s (%s, RSSI %d)\n",
-                      d.name.c_str(), d.address.c_str(), d.rssi);
+        d.isTiltDevice = dev.isAdvertisingService(NimBLEUUID(TILT_BLE_SERVICE_UUID)) ||
+                         d.name.startsWith(TILT_DEFAULT_DEVICE_NAME);
+        Serial.printf("[Table BLE Client] Scan result: %s (%s, type %u, tilt=%d, RSSI %d)\n",
+                      d.name.length() ? d.name.c_str() : "(без імені)",
+                      d.address.c_str(), d.addressType, d.isTiltDevice, d.rssi);
         list.push_back(d);
     }
     pScan->clearResults();
     return list;
 }
 
-bool TableBleClient::connectTo(const String& address) {
+bool TableBleClient::connectTo(const String& address, uint8_t addressType) {
     targetAddress = address;
+    targetAddressType = addressType;
     autoConnectAttempts = 0;
-    autoConnectEnabled = false;
     saveNvs();
-    return connectInternal(address);
+    return connectInternal(address, addressType);
 }
 
 void TableBleClient::disconnect() {

@@ -14,6 +14,7 @@ public:
     float getRoll() const;
     float getGyroRate() const; // Кутова швидкість вздовж робочої осі (град/с)
     bool isConnected() const;
+    bool hasZeroOrientation() const;
 
     // Скидання гіроскопа: збереження поточного фізичного положення як 0.0° у flash-пам'ять NVS
     bool zeroOrientation();
@@ -32,6 +33,7 @@ private:
 
     bool initialized;
     bool connected;
+    bool zeroConfigured;
 
     float gyroBiasX;
     float gyroBiasY;
@@ -46,6 +48,7 @@ private:
 
     uint32_t lastUpdateMs;
     uint32_t lastSampleUs;
+    uint32_t lastReadErrorLogMs;
 
     void loadNvs();
     void saveNvs();

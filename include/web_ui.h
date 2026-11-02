@@ -69,6 +69,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
     .badge-holding { background: #a371f733; color: #d2a8ff; border: 1px solid #8957e5; animation: pulse 1.5s infinite; }
     .badge-connected { background: #23863633; color: #3fb950; border: 1px solid #238636; }
     .badge-disconnected { background: #da363333; color: #f85149; border: 1px solid #da3633; }
+    .badge-warning { background: #d2992233; color: #e3b341; border: 1px solid #9e6a03; }
     .badge-stopped, .badge-error { background: #da363333; color: #f85149; border: 1px solid #da3633; }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
@@ -386,12 +387,12 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       <div class="status-grid">
         <div class="status-item">
           <div class="label">Кут нахилу (GY-521)</div>
-          <div class="value"><span id="valTiltAngle">0.00</span>°</div>
-          <div class="sub">Ціль: <span id="valTiltTarget">0.0</span>° | Мотор: <span id="valTiltMotorAngle">0.0</span>°</div>
+          <div class="value"><span id="valTiltAngle">—</span>°</div>
+          <div class="sub">Ціль: <span id="valTiltTarget">—</span>° | Мотор: <span id="valTiltMotorAngle">—</span>°</div>
         </div>
         <div class="status-item">
           <div class="label">Швидкість нахилу</div>
-          <div class="value"><span id="valTiltSpeed">0</span> <small style="font-size:0.9rem">°/с</small></div>
+          <div class="value"><span id="valTiltSpeed">—</span> <small style="font-size:0.9rem">°/с</small></div>
           <div class="sub">
             <span id="dotTiltHold" class="indicator-dot dot-off"></span><span id="txtTiltHold">Утримання вимкнено</span>
           </div>
@@ -402,7 +403,8 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <div>База нуля: <span id="dotTiltHomed" class="indicator-dot dot-off"></span><span id="txtTiltHomed" style="color: var(--text);">Не відкалібрований</span></div>
       </div>
       <div class="info-box" style="margin-top: 10px; margin-bottom: 0;">
-        <div>Датчик GY-521: Pitch: <span id="valTiltPitch" style="color:#79c0ff">0.00</span>°, Roll: <span id="valTiltRoll" style="color:#79c0ff">0.00</span>° | Стан: <span id="txtTiltGyroState">Очікування зв'язку</span></div>
+        <div>Датчик GY-521: Pitch: <span id="valTiltPitch" style="color:#79c0ff">—</span>°, Roll: <span id="valTiltRoll" style="color:#79c0ff">—</span>° | Стан: <span id="txtTiltGyroState">Очікування телеметрії</span></div>
+        <div>Збережений нуль гіроскопа: <span id="txtTiltGyroZero">невідомо</span></div>
         <div id="txtTiltError" style="color: var(--danger); font-size: 0.8rem;"></div>
       </div>
     </div>
@@ -637,6 +639,7 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
           <div class="form-group">
             <label for="inputTiltMac">MAC-адреса або ім'я плати:</label>
             <input type="text" id="inputTiltMac" placeholder="XX:XX:XX:XX:XX:XX або TiltTable-ESP32">
+            <input type="hidden" id="inputTiltAddressType" value="0">
           </div>
           <div class="form-group" style="display: flex; flex-direction: column; justify-content: center; gap: 8px; margin-top: 24px;">
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -717,6 +720,11 @@ const char PAGE_INDEX[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <input type="checkbox" id="chkTiltBootHome" style="width: 20px; height: 20px; cursor: pointer;">
           <label for="chkTiltBootHome" style="margin-bottom: 0; cursor: pointer;">Автоматичний пошук нуля при запуску плати нахилу</label>
+        </div>
+        <div class="form-group">
+          <label for="inputTiltHomeTarget">Стартовий кут після пошуку кінцевика (°):</label>
+          <input type="number" id="inputTiltHomeTarget" value="0" step="0.1">
+          <small class="info-box">Після автоматичного або ручного Home: якщо збережено нуль гіроскопа, платформа вирівнюється за ним (0°); інакше переходить до цього стартового кута. Кут обмежується межами нахилу.</small>
         </div>
         <div class="grid-2">
           <div class="form-group">
@@ -1881,7 +1889,7 @@ POST /api/wifi/reset</pre>
     async function scanTiltBt() {
       const btn = document.getElementById('btnScanTiltBt');
       btn.disabled = true;
-      btn.textContent = '🔍 Сканування Bluetooth (3 сек)...';
+      btn.textContent = '🔍 Сканування Bluetooth (8 сек)...';
       toast('Сканування Bluetooth ефіру...');
       const res = await apiCall('/api/tilt/bt/scan');
       btn.disabled = false;
@@ -1900,12 +1908,15 @@ POST /api/wifi/reset</pre>
         return;
       }
 
-      res.devices.sort((a, b) => b.rssi - a.rssi);
+      res.devices.sort((a, b) =>
+        Number(b.is_tilt_device) - Number(a.is_tilt_device) || b.rssi - a.rssi);
       res.devices.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.address;
-        const name = d.name || 'Невідомий пристрій';
-        opt.textContent = `${name} [${d.address}] (${d.rssi} dBm)`;
+        opt.dataset.addressType = String(d.address_type ?? 0);
+        const name = d.name || '(без імені)';
+        const kind = d.is_tilt_device ? ' · сервіс Tilt знайдено' : '';
+        opt.textContent = `${name} [${d.address}] (${d.rssi} dBm, addr type ${opt.dataset.addressType}${kind})`;
         select.appendChild(opt);
       });
 
@@ -1916,14 +1927,21 @@ POST /api/wifi/reset</pre>
     function onSelectTiltBtDevice(addr) {
       if (!addr) return;
       document.getElementById('inputTiltMac').value = addr;
+      const option = document.getElementById('selectTiltBtScan').selectedOptions[0];
+      document.getElementById('inputTiltAddressType').value = option?.dataset.addressType || '0';
     }
 
     async function connectTiltBt() {
       const mac = document.getElementById('inputTiltMac').value.trim();
+      const addressType = parseInt(document.getElementById('inputTiltAddressType').value, 10) || 0;
       const autoConn = document.getElementById('chkTiltAutoConnect').checked;
       updateTiltAutoConnectHint(autoConn);
       toast('Підключення до плати нахилу через Bluetooth...');
-      const res = await apiCall('/api/tilt/bt/connect', { address: mac, auto_connect: autoConn });
+      const res = await apiCall('/api/tilt/bt/connect', {
+        address: mac,
+        address_type: addressType,
+        auto_connect: autoConn
+      });
       if (res && res.status === 'ok') {
         toast('Команду підключення прийнято.');
       } else {
@@ -1977,6 +1995,7 @@ POST /api/wifi/reset</pre>
       if (res.homing_slow_speed !== undefined) document.getElementById('inputTiltHomeSlow').value = res.homing_slow_speed;
       if (res.homing_backoff_deg !== undefined) document.getElementById('inputTiltHomeBackoff').value = res.homing_backoff_deg;
       if (res.auto_home !== undefined) document.getElementById('chkTiltBootHome').checked = !!res.auto_home;
+      if (res.home_target_angle !== undefined) document.getElementById('inputTiltHomeTarget').value = res.home_target_angle;
 
       if (res.hold_deadband !== undefined) document.getElementById('inputTiltHoldDeadband').value = res.hold_deadband;
       if (res.hold_kp !== undefined) document.getElementById('inputTiltHoldKp').value = res.hold_kp;
@@ -2035,6 +2054,7 @@ POST /api/wifi/reset</pre>
         homing_slow_speed: parseFloat(document.getElementById('inputTiltHomeSlow').value),
         homing_backoff_deg: parseFloat(document.getElementById('inputTiltHomeBackoff').value),
         auto_home: document.getElementById('chkTiltBootHome').checked,
+        home_target_angle: parseFloat(document.getElementById('inputTiltHomeTarget').value),
 
         hold_deadband: parseFloat(document.getElementById('inputTiltHoldDeadband').value),
         hold_kp: parseFloat(document.getElementById('inputTiltHoldKp').value)
@@ -2063,19 +2083,24 @@ POST /api/wifi/reset</pre>
         badgeConn.className = 'badge ' + (isConn ? 'badge-connected' : 'badge-disconnected');
 
         const badgeHdr = document.getElementById('badgeTiltState');
-        badgeHdr.textContent = 'НАХИЛ: ' + (isConn ? (st.state || 'IDLE') : 'DISCONNECTED');
-        badgeHdr.className = 'badge badge-' + (isConn ? String(st.state || 'idle').toLowerCase() : 'disconnected');
+        const hasTelemetry = isConn && !!st.telemetry_received;
+        const tiltState = !isConn ? 'BLE OFFLINE' : (hasTelemetry ? (st.state || 'IDLE') : 'WAITING DATA');
+        badgeHdr.textContent = 'НАХИЛ: ' + tiltState;
+        badgeHdr.className = 'badge badge-' + (!isConn ? 'disconnected' : (hasTelemetry ? String(st.state || 'idle').toLowerCase() : 'warning'));
 
         document.getElementById('lblTiltRssi').textContent = isConn ? `RSSI: ${st.rssi || 0} dBm` : 'RSSI: - dBm';
-        if (st.target_address && !document.getElementById('inputTiltMac').value) {
-          document.getElementById('inputTiltMac').value = st.target_address;
+        if (st.target_address) {
+          if (!document.getElementById('inputTiltMac').value) {
+            document.getElementById('inputTiltMac').value = st.target_address;
+          }
+          document.getElementById('inputTiltAddressType').value = String(st.target_address_type ?? 0);
         }
 
         // Кути нахилу
-        document.getElementById('valTiltAngle').textContent = (st.angle || 0).toFixed(2);
-        document.getElementById('valTiltTarget').textContent = (st.target_angle || 0).toFixed(1);
-        document.getElementById('valTiltMotorAngle').textContent = (st.motor_angle || 0).toFixed(2);
-        document.getElementById('valTiltSpeed').textContent = Math.round(st.speed || 0);
+        document.getElementById('valTiltAngle').textContent = hasTelemetry ? (st.angle || 0).toFixed(2) : '—';
+        document.getElementById('valTiltTarget').textContent = hasTelemetry ? (st.target_angle || 0).toFixed(1) : '—';
+        document.getElementById('valTiltMotorAngle').textContent = hasTelemetry ? (st.motor_angle || 0).toFixed(2) : '—';
+        document.getElementById('valTiltSpeed').textContent = hasTelemetry ? Math.round(st.speed || 0) : '—';
 
         // Режим підтримання кута (Hold)
         tiltHoldActive = !!st.hold_active;
@@ -2114,14 +2139,25 @@ POST /api/wifi/reset</pre>
         }
 
         // Дані GY-521
-        document.getElementById('valTiltPitch').textContent = (st.pitch || 0).toFixed(2);
-        document.getElementById('valTiltRoll').textContent = (st.roll || 0).toFixed(2);
-        document.getElementById('txtTiltGyroState').textContent = st.gyro_connected ? 'MPU-6050 OK' : 'Немає зв\'язку';
-        document.getElementById('txtTiltError').textContent = st.error || '';
+        document.getElementById('valTiltPitch').textContent = hasTelemetry ? (st.pitch || 0).toFixed(2) : '—';
+        document.getElementById('valTiltRoll').textContent = hasTelemetry ? (st.roll || 0).toFixed(2) : '—';
+        document.getElementById('txtTiltGyroState').textContent = !isConn
+          ? 'Немає BLE-зв’язку з платою'
+          : (!hasTelemetry ? 'Очікування телеметрії від плати' : (st.gyro_connected ? 'MPU-6050 OK' : 'MPU-6050 не відповідає'));
+        document.getElementById('txtTiltGyroZero').textContent = !hasTelemetry
+          ? 'невідомо — телеметрію ще не отримано'
+          : (st.gyro_zero_configured ? 'задано — після автопошуку платформа вирівнюється до 0°' : 'не задано — використовується стартовий кут');
+        document.getElementById('txtTiltError').textContent = hasTelemetry ? (st.error || '') : '';
 
-        const isBusy = (st.state === 'HOMING');
-        document.getElementById('btnTiltHome').disabled = isBusy || !isConn;
-        document.getElementById('btnTiltMove').disabled = isBusy || !isConn;
+        const isBusy = hasTelemetry && st.state === 'HOMING';
+        const canControl = isConn && !isBusy;
+        document.getElementById('btnTiltHome').disabled = !canControl;
+        document.getElementById('btnTiltMove').disabled = !canControl;
+        document.getElementById('btnTiltToggleHold').disabled = !canControl;
+        document.getElementById('btnTiltZero').disabled = !canControl;
+        document.getElementById('btnTiltGyroZero').disabled = !canControl;
+        document.getElementById('btnTiltCalGyro').disabled = !canControl;
+        document.getElementById('btnTiltStop').disabled = !isConn;
       } finally {
         isTiltUpdating = false;
       }

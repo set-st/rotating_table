@@ -7,7 +7,9 @@
 struct BleDiscoveredDevice {
     String name;
     String address;
+    uint8_t addressType;
     int rssi;
+    bool isTiltDevice;
 };
 
 class TableBleClient {
@@ -39,11 +41,12 @@ public:
 
     // Керування підключенням та сканування
     std::vector<BleDiscoveredDevice> scanDevices(uint32_t durationSec = 3);
-    bool connectTo(const String& address);
+    bool connectTo(const String& address, uint8_t addressType = 0);
     void disconnect();
     void setAutoConnect(bool enable);
     bool isAutoConnect() const { return autoConnectEnabled; }
     String getTargetAddress() const { return targetAddress; }
+    uint8_t getTargetAddressType() const { return targetAddressType; }
 
 private:
     bool connected;
@@ -51,6 +54,7 @@ private:
     bool autoConnectEnabled;
     uint8_t autoConnectAttempts;
     String targetAddress;
+    uint8_t targetAddressType;
     int lastRssi;
 
     TiltStatus cachedStatus;
@@ -67,7 +71,7 @@ private:
 
     void loadNvs();
     void saveNvs();
-    bool connectInternal(const String& address);
+    bool connectInternal(const String& address, uint8_t addressType);
     bool sendRawCommand(const char* jsonPayload);
 
     friend class TableBleClientCallbacks;
