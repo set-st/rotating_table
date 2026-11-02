@@ -49,7 +49,7 @@ class Sim:
             "steps_per_mm_x": 80.0, "steps_per_mm_z": 80.0,
             "x_length_mm": 1000.0, "x_length_measured": False,
             "z_height_mm": 500.0, "x_dir_invert": False, "z_dir_invert": False,
-            "limit_active_low": True, "z_endstop_top": True, "auto_home_on_boot": False,
+            "limit_active_low": True, "z_endstop_top": True, "auto_home_on_boot": False, "ignore_homing": False,
             "max_speed_mm_s": 50.0, "accel_mm_s2": 200.0,
             "homing_speed_mm_s": 20.0, "homing_backoff_mm": BACKOFF_DEFAULT,
         }
@@ -102,7 +102,7 @@ class Sim:
                 "x_mm": self.pos[0], "z_mm": self.pos[1],
                 "target_x_mm": self.target[0], "target_z_mm": self.target[1],
                 "speed_mm_s": self.speed,
-                "is_homed": all(self.homed), "homed_x": self.homed[0], "homed_z": self.homed[1],
+                "is_homed": all(self.homed), "ignore_homing": s["ignore_homing"], "homed_x": self.homed[0], "homed_z": self.homed[1],
                 "limit_x": lx, "limit_x_far": lxf, "limit_z": lz,
                 "drivers_enabled": self.enabled,
                 "x_length_mm": s["x_length_mm"], "x_length_measured": s["x_length_measured"],
@@ -157,7 +157,7 @@ class Sim:
                 return "Каретка вже рухається"
             if not self.enabled:
                 return "Драйвери вимкнено"
-            if not all(self.homed):
+            if not all(self.homed) and not self.settings["ignore_homing"]:
                 return "Спочатку виконайте homing"
             s = self.settings
             if not (0 <= x <= s["x_length_mm"] and 0 <= z <= s["z_height_mm"]):

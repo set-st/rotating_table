@@ -101,6 +101,7 @@ void RailwayWebServer::handleStatus() {
     doc["target_z_mm"] = st.targetZMm;
     doc["speed_mm_s"] = st.speedMmS;
     doc["is_homed"] = st.homedX && st.homedZ;
+    doc["ignore_homing"] = cfg.ignoreHoming;
     doc["homed_x"] = st.homedX;
     doc["homed_z"] = st.homedZ;
     doc["limit_x"] = st.limitX;
@@ -213,6 +214,7 @@ void RailwayWebServer::handleGetSettings() {
     doc["limit_active_low"] = s.limitActiveLow;
     doc["z_endstop_top"] = s.zEndstopTop;
     doc["auto_home_on_boot"] = s.autoHomeOnBoot;
+    doc["ignore_homing"] = s.ignoreHoming;
     doc["max_speed_mm_s"] = s.maxSpeedMmS;
     doc["accel_mm_s2"] = s.accelMmS2;
     doc["homing_speed_mm_s"] = s.homingSpeedMmS;
@@ -233,6 +235,7 @@ void RailwayWebServer::handleSaveSettings() {
     s.limitActiveLow = req["limit_active_low"] | s.limitActiveLow;
     s.zEndstopTop = req["z_endstop_top"] | s.zEndstopTop;
     s.autoHomeOnBoot = req["auto_home_on_boot"] | s.autoHomeOnBoot;
+    s.ignoreHoming = req["ignore_homing"] | s.ignoreHoming;
     s.maxSpeedMmS = req["max_speed_mm_s"] | s.maxSpeedMmS;
     s.accelMmS2 = req["accel_mm_s2"] | s.accelMmS2;
     s.homingSpeedMmS = req["homing_speed_mm_s"] | s.homingSpeedMmS;

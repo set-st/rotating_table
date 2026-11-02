@@ -39,6 +39,7 @@ struct RailwaySettings {
     bool limitActiveLow = true;     // true: кінцевик спрацьовує низьким рівнем
     bool zEndstopTop = true;        // Лише для відображення: кінцевик Z зверху
     bool autoHomeOnBoot = false;
+    bool ignoreHoming = false;      // Налагодження: дозволити рух без homing (як у Klipper)
     float maxSpeedMmS = 50.0f;
     float accelMmS2 = 200.0f;
     float homingSpeedMmS = 20.0f;

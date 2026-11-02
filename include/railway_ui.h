@@ -525,6 +525,9 @@ const char PAGE_RAILWAY[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       </div>
       <div class="form-group">
         <label><input type="checkbox" id="setAutoHome"> Homing при увімкненні</label>
+       </div>
+       <div class="form-group">
+         <label><input type="checkbox" id="setIgnoreHoming"> Ігнорувати homing (налагодження)</label>
       </div>
       <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">
         Зміна кроків/мм або інверсії DIR скидає homing. Налаштування не можна змінювати під час руху.
@@ -794,7 +797,7 @@ POST /api/wifi/reset</pre>
 
       const homed = document.getElementById('badgeHomed');
       homed.className = 'badge ' + (st.is_homed ? 'badge-connected' : 'badge-warning');
-      homed.textContent = st.is_homed ? 'HOMED' : 'БЕЗ HOMING';
+      homed.textContent = st.is_homed ? 'HOMED' : (st.ignore_homing ? 'HOMING ІГНОРУЄТЬСЯ' : 'БЕЗ HOMING');
 
       document.getElementById('valX').textContent = fmt(st.x_mm);
       document.getElementById('valZ').textContent = fmt(st.z_mm);
@@ -935,6 +938,7 @@ POST /api/wifi/reset</pre>
       document.getElementById('setLimitLow').checked = s.limit_active_low;
       document.getElementById('setZTop').checked = s.z_endstop_top;
       document.getElementById('setAutoHome').checked = s.auto_home_on_boot;
+      document.getElementById('setIgnoreHoming').checked = !!s.ignore_homing;
       document.getElementById('rangeSpeed').value = Math.min(100, s.max_speed_mm_s);
       onSpeedChange(document.getElementById('rangeSpeed').value);
     }
@@ -955,7 +959,8 @@ POST /api/wifi/reset</pre>
         homing_backoff_mm: num('setBackoff'),
         limit_active_low: chk('setLimitLow'),
         z_endstop_top: chk('setZTop'),
-        auto_home_on_boot: chk('setAutoHome')
+        auto_home_on_boot: chk('setAutoHome'),
+        ignore_homing: chk('setIgnoreHoming')
       });
       if (res && res.status === 'ok') {
         toast('Налаштування збережено');

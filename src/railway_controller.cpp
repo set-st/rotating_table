@@ -127,6 +127,7 @@ void RailwayController::loadSettings() {
     cfg.limitActiveLow = p.getBool("lowact", cfg.limitActiveLow);
     cfg.zEndstopTop = p.getBool("ztop", cfg.zEndstopTop);
     cfg.autoHomeOnBoot = p.getBool("autohome", cfg.autoHomeOnBoot);
+    cfg.ignoreHoming = p.getBool("ignhome", cfg.ignoreHoming);
     cfg.maxSpeedMmS = p.getFloat("vmax", cfg.maxSpeedMmS);
     cfg.accelMmS2 = p.getFloat("accel", cfg.accelMmS2);
     cfg.homingSpeedMmS = p.getFloat("vhome", cfg.homingSpeedMmS);
@@ -198,6 +199,7 @@ bool RailwayController::saveSettings(const RailwaySettings& s, String& error) {
     p.putBool("lowact", cfg.limitActiveLow);
     p.putBool("ztop", cfg.zEndstopTop);
     p.putBool("autohome", cfg.autoHomeOnBoot);
+    p.putBool("ignhome", cfg.ignoreHoming);
     p.putFloat("vmax", cfg.maxSpeedMmS);
     p.putFloat("accel", cfg.accelMmS2);
     p.putFloat("vhome", cfg.homingSpeedMmS);
@@ -289,7 +291,8 @@ void RailwayController::controlAxis(uint8_t a, float dt) {
     Axis& A = axes[a];
     if (!A.moving) return;
 
-    if ((A.dir < 0 && limitActive(a)) || (A.dir > 0 && farLimitActive(a))) {
+    const bool ignoreLimits = cfg.ignoreHoming && !homingActive;   // Налагодження: кінцевики не зупиняють звичайний рух
+    if (!ignoreLimits && ((A.dir < 0 && limitActive(a)) || (A.dir > 0 && farLimitActive(a)))) {
         fail(a == 0 ? "Спрацював кінцевик осі X" : "Спрацював кінцевик осі Z");
         return;
     }
@@ -503,7 +506,7 @@ bool RailwayController::moveTo(float xMm, float zMm, float speedMmS, String& err
     do {
         if (busy()) { error = "Каретка вже рухається"; break; }
         if (!outputsEnabled) { error = "Драйвери вимкнено"; break; }
-        if (!homed[0] || !homed[1]) { error = "Спочатку виконайте homing"; break; }
+        if (!cfg.ignoreHoming && (!homed[0] || !homed[1])) { error = "Спочатку виконайте homing"; break; }
         if (!isfinite(xMm) || !isfinite(zMm) || xMm < 0 || xMm > cfg.xLengthMm ||
             zMm < 0 || zMm > cfg.zHeightMm) {
             error = "Координати поза межами стіни";
