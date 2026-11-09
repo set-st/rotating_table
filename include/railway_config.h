@@ -26,7 +26,7 @@ constexpr uint32_t RW_TICK_HZ = 20000;      // Частота таймера г�
 constexpr float RW_MAX_SPEED_LIMIT_MM_S = 100.0f;
 constexpr float RW_MIN_STEPS_PER_MM = 1.0f;
 constexpr float RW_MAX_STEPS_PER_MM = 1000.0f;
-constexpr float RW_MAX_LENGTH_MM = 5000.0f;
+constexpr float RW_MAX_LENGTH_MM = 8000.0f;    // Межа налаштувань і максимальний хід пошуку кінцевиків
 
 struct RailwaySettings {
     float stepsPerMmX = 80.0f;      // 200 кроків * 1/16 / (20 зубів * 2 мм)

@@ -151,7 +151,7 @@ bool RailwayController::saveSettings(const RailwaySettings& s, String& error) {
     }
     if (!inRange(s.xLengthMm, 10.0f, RW_MAX_LENGTH_MM) ||
         !inRange(s.zHeightMm, 10.0f, RW_MAX_LENGTH_MM)) {
-        error = "Довжина та висота: допустимо 10–5000 мм";
+        error = "Довжина та висота: допустимо 10–" + String((int)RW_MAX_LENGTH_MM) + " мм";
         return false;
     }
     if (!inRange(s.maxSpeedMmS, 1.0f, RW_MAX_SPEED_LIMIT_MM_S) ||
@@ -342,10 +342,15 @@ void RailwayController::beginHomePhase(uint8_t a, HomePhase phase) {
         homePhaseTimeoutMs = (uint32_t)((cfg.homingBackoffMm / cfg.homingSpeedMmS + 5.0f) * 1000.0f);
         startMove(a, backoffSteps, fastSps, accel);
         break;
-    case HomePhase::SEEK:
-        homePhaseTimeoutMs = (uint32_t)((1.2f * lengthMm(a) / cfg.homingSpeedMmS + 10.0f) * 1000.0f);
-        startMove(a, -(int32_t)(1.2f * lengthMm(a) * spm), fastSps, accel);
+    case HomePhase::SEEK: {
+        // Поки довжину X не виміряно, вона невідома: шукати на повний максимальний хід
+        const float seekMm = (a == 0 && !cfg.xLengthMeasured)
+                                 ? RW_MAX_LENGTH_MM
+                                 : min(1.2f * lengthMm(a), RW_MAX_LENGTH_MM);
+        homePhaseTimeoutMs = (uint32_t)((seekMm / cfg.homingSpeedMmS + 10.0f) * 1000.0f);
+        startMove(a, -(int32_t)(seekMm * spm), fastSps, accel);
         break;
+    }
     case HomePhase::SLOW:
         homePhaseTimeoutMs = (uint32_t)((cfg.homingBackoffMm * 3.0f / slowMmS + 5.0f) * 1000.0f);
         startMove(a, -(int32_t)(cfg.homingBackoffMm * 3.0f * spm), slowMmS * spm, accel);
